@@ -2708,14 +2708,18 @@ function GlassDock(content, { source, side } = {}) {
   const pill = h('div', { class: 'lgx-pill' }, pc, h('div', { class: 'lgx-tint' }), h('div', { class: 'lgd-in' }, content));
   const dot = side ? h('div', { class: 'lgx-dot' }, dc, h('div', { class: 'lgx-tint' }), side) : null;
   const el = h('nav', { class: 'lgx lgdock' + (side ? ' has-side' : ''), 'aria-label': 'Barre d\'outils' }, pill, dot);
-  let fD = null, dOut = null;
+  let fD = null, dOut = null, szW = 0, szH = 0, szT = 0;
   /* a thin bar (the browser's compact address pill) keeps a bevel and a bend in proportion to its height */
   const slim = hh => ({ R: hh / 2, bezel: Math.min(LGX.cfg.bezel, hh * .34), refr: LGX.cfg.refr * Math.min(1, hh / 60) });
   let imgV = -1, src = null, srcPage = null, dirty = true, ver = 1, f = null, fkey = '', out = null, last = '', mo = null, alive = true;
   const watch = () => { if (mo) mo.disconnect(); srcPage = source && source(); if (!srcPage) return; mo = new MutationObserver(debounce(() => { dirty = true; }, 120)); mo.observe(srcPage.parentElement || srcPage, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class', 'style'] }); dirty = true; };
   const frame = () => {
     if (!el.isConnected || !el.offsetParent) return;
-    const dpr = Math.min(2, window.devicePixelRatio || 1), c = LGX.cfg, pw = Math.round(pill.clientWidth), ph = Math.round(pill.clientHeight); if (!pw || !ph) return;
+    const c = LGX.cfg, pw = Math.round(pill.clientWidth), ph = Math.round(pill.clientHeight); if (!pw || !ph) return;
+    /* while the bar is changing size (compact ↔ full), the glass is drawn at lower resolution: each frame of
+       the animation is a new shape, and full resolution there only costs smoothness */
+    const tN = performance.now(); if (pw !== szW || ph !== szH) { szW = pw; szH = ph; szT = tN; }
+    const dpr = tN - szT < 180 ? 1 : Math.min(2, window.devicePixelRatio || 1);
     if (!srcPage || !srcPage.isConnected) { watch(); }
     if (imgV !== LGX.imgVer) { imgV = LGX.imgVer; dirty = true; }
     /* a website in an iframe: real Liquid Glass when it comes through the proxy (same origin, readable);
@@ -3951,6 +3955,65 @@ function showBanner(n) {
 }
 function hideBanner() { L.banner.classList.remove('on'); clearTimeout(bannerT); BGL.start(); }
 /* Live banner in Liquid Glass: the screen behind is captured when it arrives and the card bends it while it slides in, is pulled up or leaves. */
+/* Banner glass on the GPU (WebGL): the screen behind is uploaded once as two textures (fixed part +
+   scrolling content) and the glass plate is a fragment shader. Scrolling only changes one number, so the
+   phone's processor has nothing left to do; the CPU path stays as a fallback. */
+const BGPU = {
+  ok: null, cv: null, gl: null, pr: null, tB: null, tL: null, U: {},
+  init() {
+    if (BGPU.ok !== null) return BGPU.ok; BGPU.ok = false;
+    try {
+      const cv = h('canvas', { class: 'ccg-c', 'aria-hidden': 'true' }), gl = cv.getContext('webgl', { premultipliedAlpha: true, alpha: true, antialias: false, preserveDrawingBuffer: false });
+      if (!gl) return false;
+      const VS = 'attribute vec2 a;void main(){gl_Position=vec4(a,0.,1.);}';
+      const FS = `precision highp float;
+uniform sampler2D uB,uL;uniform vec2 uBW,uSize,uO,uLd;uniform vec4 uLay,uClip,uTint;uniform vec3 uRc;uniform float uHasL,uD,uDpr,uR,uBez,uKk,uDs,uBev,uRim;
+float sdf(vec2 p){vec2 c=uSize*.5;vec2 q=abs(p-c)-(c-vec2(uR));return min(max(q.x,q.y),0.)+length(max(q,0.))-uR;}
+vec3 scene(vec2 p){vec3 col=texture2D(uB,p/uBW).rgb;if(uHasL>.5&&p.x>=uClip.x&&p.y>=uClip.y&&p.x<=uClip.x+uClip.z&&p.y<=uClip.y+uClip.w){vec4 l=texture2D(uL,(p-uLay.xy+vec2(0.,uD))/uLay.zw);col=l.rgb+col*(1.-l.a);}return col;}
+void main(){vec2 px=vec2(gl_FragCoord.x,uSize.y*uDpr-gl_FragCoord.y)/uDpr;float d=sdf(px);float aa=.5-d*uDpr;if(aa<=0.){gl_FragColor=vec4(0.);return;}
+float depth=-d;vec2 b=uO+px;vec3 col;
+if(depth<uBez){vec2 n=vec2(sdf(px+vec2(.5,0.))-d,sdf(px+vec2(0.,.5))-d);n/=max(length(n),1e-4);float m=depth<=0.?1.:pow(1.-depth/uBez,2.4);vec2 dd=n*m*uKk;
+col=vec3(scene(b+dd*(1.-uDs)).r,scene(b+dd).g,scene(b+dd*(1.+uDs)).b);col=col*(1.-uTint.a)+uTint.rgb*uTint.a;float lit=-(n.x*uLd.x+n.y*uLd.y);col+=m*uBev*lit;
+float ra=max(0.,1.-depth/1.5)*uRim*(.3+.7*max(0.,lit));col=mix(col,uRc,ra);}
+else{col=scene(b)*(1.-uTint.a)+uTint.rgb*uTint.a;}
+float a=min(aa,1.);gl_FragColor=vec4(clamp(col,0.,1.)*a,a);}`;
+      const sh = (t, src) => { const o = gl.createShader(t); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
+      const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(pr); if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) return false;
+      gl.useProgram(pr); const bf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+      const al = gl.getAttribLocation(pr, 'a'); gl.enableVertexAttribArray(al); gl.vertexAttribPointer(al, 2, gl.FLOAT, false, 0, 0);
+      ['uB', 'uL', 'uBW', 'uSize', 'uO', 'uLd', 'uLay', 'uClip', 'uTint', 'uRc', 'uHasL', 'uD', 'uDpr', 'uR', 'uBez', 'uKk', 'uDs', 'uBev', 'uRim'].forEach(k => BGPU.U[k] = gl.getUniformLocation(pr, k));
+      const tex = () => { const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4)); return t; };
+      BGPU.tB = tex(); BGPU.tL = tex(); gl.uniform1i(BGPU.U.uB, 0); gl.uniform1i(BGPU.U.uL, 1);
+      cv.addEventListener('webglcontextlost', e => { e.preventDefault(); BGPU.ok = false; });
+      Object.assign(BGPU, { cv, gl, pr }); BGPU.ok = true;
+    } catch (e) { BGPU.ok = false; }
+    return BGPU.ok;
+  },
+  upload(base, lay) {
+    const gl = BGPU.gl; gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, BGPU.tB); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, base);
+    if (lay) { gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, BGPU.tL); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, lay); }
+  },
+  draw(card, Ly, d) {
+    const gl = BGPU.gl, U = BGPU.U, cv = BGPU.cv; if (!card || !card.isConnected) return;
+    const w = card.offsetWidth, hh = card.offsetHeight; if (w < 4 || hh < 4) return;
+    const dpr = Math.min(3, window.devicePixelRatio || 1), W2 = Math.round(w * dpr), H2 = Math.round(hh * dpr);
+    if (cv.width !== W2 || cv.height !== H2) { cv.width = W2; cv.height = H2; }
+    const r = card.getBoundingClientRect(), dark = D.documentElement.dataset.mode !== 'light', cfg = LGX.cfg;
+    const R = Math.min(BGL.cardR || hh / 2, hh / 2, w / 2), look = LGX.plateLook(dark, { R, refr: cfg.refr, bezel: Math.min(cfg.bezel, R * .9) });
+    const tint = dark ? [30, 30, 36, .34] : [246, 246, 250, .40], bez = Math.max(4, Math.min(look.bezel, R * .95, Math.min(w, hh) * .45));
+    gl.viewport(0, 0, W2, H2); gl.useProgram(BGPU.pr);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, BGPU.tB); gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, BGPU.tL);
+    gl.uniform2f(U.uBW, Ly.base.W, Ly.base.H); gl.uniform2f(U.uSize, w, hh); gl.uniform2f(U.uO, (r.left - Ly.rect.left) / SC, (r.top - Ly.rect.top) / SC);
+    gl.uniform2f(U.uLd, look.lx == null ? -.5 : look.lx, look.ly == null ? -.85 : look.ly);
+    const has = !!(Ly.lay && Ly.clip); gl.uniform1f(U.uHasL, has ? 1 : 0);
+    if (has) { const [cx, cy, cw, ch] = Ly.clip, ld = Ly.dpr; gl.uniform4f(U.uClip, cx, cy, cw, ch);
+      if (Ly.src.fr) gl.uniform4f(U.uLay, cx, cy - Ly.src.off, cw, Ly.lay.height / ld); else gl.uniform4f(U.uLay, 0, -Ly.UP, Ly.lay.width / ld, Ly.lay.height / ld); }
+    gl.uniform4f(U.uTint, tint[0] / 255, tint[1] / 255, tint[2] / 255, tint[3]); const rc = look.rc / 255; gl.uniform3f(U.uRc, rc, rc, rc);
+    gl.uniform1f(U.uD, d); gl.uniform1f(U.uDpr, dpr); gl.uniform1f(U.uR, R); gl.uniform1f(U.uBez, bez); gl.uniform1f(U.uKk, -.5 * look.refr); gl.uniform1f(U.uDs, look.disp); gl.uniform1f(U.uBev, look.bevel); gl.uniform1f(U.uRim, look.rim);
+    gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  },
+};
 const BGL = {
   snap: null, until: 0, running: false, sig: '', tT: 0, L: null, src: null, lastScroll: 0, comp: null,
   /* The screen behind the banner is kept as two layers: the fixed part (wallpaper, page background, top bar)
@@ -3972,7 +4035,8 @@ const BGL = {
     if (src && src.sc) { const r = src.sc.getBoundingClientRect(); clip = [(r.left - tr.left) / SC, (r.top - tr.top) / SC, r.width / SC, r.height / SC]; lay = LGX.raster(t, dpr, { flat: true, clear: true, only: src.sc, y0: -UP, maxH: maxH + UP + DN }).cv; }
     else if (src && src.fr) { try { const d2 = src.fr.contentDocument; if (d2 && d2.body && d2.URL !== 'about:blank') { const r = src.fr.getBoundingClientRect(), sy = d2.defaultView.scrollY || 0; clip = [(r.left - tr.left) / SC, (r.top - tr.top) / SC, r.width / SC, r.height / SC]; const fy0 = clip[1]; lay = LGX.rasterDoc(d2, Math.max(0, sy - UP), sy + maxH - fy0 + DN, dpr).cv; src.off = sy - Math.max(0, sy - UP); } } catch (e) { lay = null; } }
     BGL.L = { base, lay, clip, src, s0: BGL.scrollOf(src), UP, DN, dpr, maxH, rect: tr };
-    BGL.tT = performance.now(); BGL.compose(0);
+    BGL.tT = performance.now();
+    if (BGL.gpu) { BGPU.upload(base.cv, lay); BGL.snap = BGL.snap || { gpu: true }; BGL.drawn = null; } else BGL.compose(0);
   },
   compose(d) {
     const Ly = BGL.L, b = Ly.base, dpr = Ly.dpr;
@@ -3992,8 +4056,11 @@ const BGL = {
   },
   show(card) {
     try {
-      BGL.L = null; BGL.take(); BGL.sig = BGL.sign();
-      L.banner.classList.add('lgov'); card.classList.add('lgg'); card._lgc = h('canvas', { class: 'ccg-c', 'aria-hidden': 'true' }); card.prepend(card._lgc);
+      BGL.L = null; BGL.snap = null; BGL.gpu = BGPU.init(); BGL.card = card;
+      L.banner.classList.add('lgov');
+      if (BGL.gpu) { card.classList.add('lgg'); card.prepend(BGPU.cv); } else { card.classList.add('lgg'); card._lgc = h('canvas', { class: 'ccg-c', 'aria-hidden': 'true' }); card.prepend(card._lgc); }
+      L.banner.replaceChildren(card); BGL.cardR = parseFloat(getComputedStyle(card).borderTopLeftRadius) || 0;
+      BGL.take(); BGL.sig = BGL.sign();
     } catch (e) { BGL.snap = null; L.banner.classList.remove('lgov'); }
   },
   start() { BGL.until = performance.now() + 900; if (BGL.running) return; BGL.running = true; requestAnimationFrame(BGL.frame); },
@@ -4006,12 +4073,14 @@ const BGL = {
       else if (BGL.again && BGL.again.length && tn >= BGL.again[0]) { BGL.again.shift(); BGL.take(); }
       else if (BGL.L) {
         const Ly = BGL.L, cur = BGL.scrollOf(Ly.src), d = cur - Ly.s0;
-        if (d !== (Ly.d || 0) && tn - (BGL.cT || 0) > 28) { Ly.d = d; BGL.lastScroll = tn; BGL.cT = tn; /* glass follows the scroll at ~30 fps: half the work, still fluid */
+        if (BGL.gpu) { if (d !== (Ly.d || 0)) { Ly.d = d; if ((d < -Ly.UP + 20 || d > Ly.DN - 20) && tn - BGL.tT > 110) BGL.take(); } }
+        else if (d !== (Ly.d || 0) && tn - (BGL.cT || 0) > 28) { Ly.d = d; BGL.lastScroll = tn; BGL.cT = tn; /* glass follows the scroll at ~30 fps: half the work, still fluid */
           if (d < -Ly.UP + 20 || d > Ly.DN - 20) { if (tn - BGL.tT > 110) BGL.take(); } else BGL.compose(d); }
         else if (d !== (Ly.d || 0)) BGL.lastScroll = tn;
       }
     } catch (e) { }
-    try { GOV.paintIn(L.banner, BGL.snap, BGL.ver); } catch (e) { }
+    if (BGL.gpu && BGPU.ok) { try { const Ly = BGL.L, c = BGL.card, r = c.getBoundingClientRect(), k = [Ly && Ly.d, r.left, r.top, c.offsetWidth, c.offsetHeight, BGL.tT, D.documentElement.dataset.mode].join('|'); if (Ly && k !== BGL.drawn) { BGL.drawn = k; BGPU.draw(c, Ly, (Ly.src && Ly.d) || 0); } } catch (e) { } }
+    else { try { GOV.paintIn(L.banner, BGL.snap, BGL.ver); } catch (e) { } }
     requestAnimationFrame(BGL.frame);
   },
 };
