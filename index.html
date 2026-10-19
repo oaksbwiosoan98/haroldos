@@ -1406,6 +1406,10 @@ body.full .screen{bottom:calc(env(safe-area-inset-bottom, 0px) + 30px);border-ra
 :root:not([data-mode="light"]) .wd.lgx-home .t span,:root:not([data-mode="light"]) .wd.lgx-home .num{text-shadow:0 0 8px rgba(0,0,0,.45)}
 /* hidden banner goes fully above the screen (it was still peeking under the status bar) */
 #banner:not(.on){transform:translateY(calc(-100% - var(--sat) - 48px))}
+/* Notes: new note / new reminder live in the round button of the bottom bar */
+.side-host .tabpane > .page > .fab{display:none}
+.rm-sheet{display:flex;align-items:center;gap:6px;padding:4px 6px 4px 16px;border-radius:24px;background:var(--s-highest)}
+.rm-sheet .rm-in{flex:1;min-width:0;height:48px;border:0;outline:0;background:none;color:var(--on-s);font:inherit;font-size:max(16px, calc(16px*var(--ts)))}
 </style>
 </head>
 <body>
@@ -4061,15 +4065,17 @@ app('notes', {
   quick: [{ icon: 'edit', label: 'Nouvelle note', link: { newNote: true } }, { icon: 'checklist', label: 'Nouvelle liste', link: { newList: true } }, { icon: 'add_task', label: 'Nouveau rappel', link: { newRem: true } }],
   create(ctx) {
     let tab = S.notesTab || 'notes';
-    const host = h('div', { class: 'tabhost glass' }), panes = { notes: h('div', { class: 'tabpane' }), rappels: h('div', { class: 'tabpane off' }) };
+    const host = h('div', { class: 'tabhost glass side-host' }), panes = { notes: h('div', { class: 'tabpane' }), rappels: h('div', { class: 'tabpane off' }) };
     host.append(panes.notes, panes.rappels);
-    const nav = GlassBar([{ id: 'notes', icon: 'sticky_note_2', label: 'Notes' }, { id: 'rappels', icon: 'checklist', label: 'Rappels' }], tab, t => show(t), { source: () => { const p = host.querySelector('.tabpane:not(.off)'); return p && (p.firstElementChild || p); } });
+    /* round button on the right: Nouvelle note on Notes, Nouveau rappel on Rappels */
+    const sideFor = t => t === 'rappels' ? { id: 'new-rem', icon: 'add', label: 'Nouveau rappel', action: () => sr.focusNew && sr.focusNew() } : { id: 'new-note', icon: 'edit', label: 'Nouvelle note', action: () => sn.openNote && sn.openNote(null) };
+    const nav = GlassBar([{ id: 'notes', icon: 'sticky_note_2', label: 'Notes' }, { id: 'rappels', icon: 'checklist', label: 'Rappels' }], tab, t => show(t), { side: sideFor(tab), source: () => { const p = host.querySelector('.tabpane:not(.off)'); return p && (p.firstElementChild || p); } });
     ctx.root(h('div', { class: 'page lg-page' }, host, nav));
     ctx.onShow(() => nav.refresh());
     const sub = id => { const s = Object.create(ctx); s.root = page => { panes[id].append(page); return page; }; return s; };
     const sn = sub('notes'), sr = sub('rappels');
     notesView(sn); APPS.rappels.create(sr);
-    const show = t => { tab = t; S.notesTab = t; persist(); nav.set(t); Object.entries(panes).forEach(([k, p]) => p.classList.toggle('off', k !== t)); };
+    const show = t => { tab = t; S.notesTab = t; persist(); nav.set(t); nav.setSide(sideFor(t)); Object.entries(panes).forEach(([k, p]) => p.classList.toggle('off', k !== t)); };
     ctx.route = l => {
       if (l.newNote || l.newList || l.note) { ctx.popAll(); show('notes'); sn.openNote(l.note || null, !!l.newList); return; }
       if (l.newRem) { ctx.popAll(); show('rappels'); setTimeout(() => sr.focusNew && sr.focusNew(), 250); return; }
@@ -4102,9 +4108,12 @@ app('rappels', {
     const inp = h('input', { class: 'rm-in', placeholder: 'Nouveau rappel', enterkeyhint: 'done', 'aria-label': 'Nouveau rappel' });
     const dueB = IconBtn('schedule', () => duePicker(ctx, pendingDue, v => { pendingDue = v; dueB.classList.toggle('tonal', !!v); dueB.title = v ? dueLabel(v) : 'Échéance'; }), { label: 'Échéance' });
     const add = () => { const t = inp.value.trim(); if (!t) return; S.reminders.unshift({ id: uid(), text: t, done: false, due: pendingDue, created: now() }); inp.value = ''; pendingDue = null; dueB.classList.remove('tonal'); SND.play('send'); save('reminders'); draw(); };
-    inp.addEventListener('keydown', e => { if (e.key === 'Enter') add(); });
-    pg.append(h('div', { class: 'composer' }, h('div', { class: 'cmp-box' }, inp, dueB), h('button', { class: 'cmp-send', onclick: add, 'aria-label': 'Ajouter' }, I('add'))));
-    ctx.root(pg); ctx.focusNew = () => inp.focus();
+    let remSheet = null; inp.addEventListener('keydown', e => { if (e.key === 'Enter' && inp.value.trim()) { add(); remSheet && remSheet.close(); } });
+    /* new reminder: opened from the round button of the bottom bar, in a sheet */
+    ctx.root(pg);
+    ctx.focusNew = () => { inp.value = ''; pendingDue = null; dueB.classList.remove('tonal');
+      const s = remSheet = ctx.sheet({ title: 'Nouveau rappel', body: h('div', { class: 'cmp-box rm-sheet' }, inp, dueB), actions: [Btn('Annuler', () => s.close(), { kind: 'text' }), Btn('Ajouter', () => { if (inp.value.trim()) { add(); s.close(); } })] });
+      setTimeout(() => inp.focus(), 380); };
     const item = r => {
       const chk = h('button', { class: 'rchk' + (r.done ? ' on' : ''), 'aria-label': r.done ? 'Marquer non fait' : 'Marquer fait', onclick: e => { e.stopPropagation(); r.done = !r.done; r.doneAt = r.done ? now() : null; buzz(10); SND.play(r.done ? 'done' : 'tap'); chk.classList.toggle('on', r.done); setTimeout(() => { save('reminders'); draw(); }, r.done ? 380 : 0); } }, I('check'));
       const over = !r.done && r.due && r.due < now();
