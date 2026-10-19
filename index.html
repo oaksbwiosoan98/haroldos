@@ -2029,12 +2029,15 @@ textarea.tf{padding:11px 14px}
 .pgl-on{color:var(--label)}
 .pgl-on .page,.pgl-on .tabpane,.pgl-on .lg-page{background:#000}
 .pgl-on .scroll,.pgl-on .dial,.pgl-on .composer{position:relative;isolation:isolate}
+.pgg-host{isolation:isolate}
+.pgg-c{position:absolute;left:0;top:0;width:100%;height:100%;z-index:-1;pointer-events:none}
+.pgg-on .scroll,.pgg-on .dial,.pgg-on .composer,.pgg-on .msgs{background:transparent!important}
 .pgl-bg{position:absolute;left:0;top:0;width:100%;z-index:-1;pointer-events:none}
 .pgl-bg > i{display:block;width:100%;background-size:100% 100%;background-repeat:no-repeat}
 .pgl{position:relative;isolation:isolate;background:transparent!important}
 .pgl > .pgl-c{position:absolute;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none}
 .pgl-on .lhead .acts{background:transparent!important;box-shadow:none!important}
-.pgl-on .page.nb-on .lhead .acts{background:rgb(0 0 0 / .55)!important}
+.pgl-on .page.nb-on .lhead .acts{background:linear-gradient(rgb(0 0 0 / .94) 78%,rgb(0 0 0 / 0))!important;box-shadow:none!important}
 /* rows become separate glass cards */
 .pgl-on .list{display:flex;flex-direction:column;gap:8px;padding:0 12px}
 .pgl-on .list > .li,.pgl-on .group > .li{border-radius:22px!important;padding:10px 14px;min-height:60px}
@@ -5436,6 +5439,113 @@ function openThreadWith(contactId) { let t = S.threads.find(x => x.contactId ===
    and every card (rows, contacts, voicemails, keys, fields, received bubbles…) is a glass plate that
    bends that backdrop. The backdrop scrolls with the content, so each plate is rendered once (only
    when it comes into view) and scrolling costs nothing; the bottom bar's glass bends all of it live. */
+/* PGG — glass of the Phone app on the GPU. The graphite backdrop stays put (it does not scroll):
+   the backdrop and every visible card (as a glass plate) are drawn again on each scroll frame, so the
+   cards slide over the shapes and bend them as they pass. One WebGL canvas, moved into the page being
+   drawn; each card is its own small quad (shadow pass, then glass pass), so a frame costs very little. */
+const PGG = {
+  ok: null, gl: null, cv: null, U: {}, hosts: new Set(), hot: 0, raf: 0, WK: '', owner: null, focus: null,
+  init() {
+    if (PGG.ok !== null) return PGG.ok; PGG.ok = false;
+    try {
+      const cv = h('canvas', { class: 'pgg-c pgg-gl', 'aria-hidden': 'true' }), gl = cv.getContext('webgl', { premultipliedAlpha: true, alpha: false, antialias: false, preserveDrawingBuffer: true });
+      if (!gl) return false;
+      const VS = `attribute vec2 a;uniform vec4 uQ;uniform vec2 uSize;void main(){vec2 p=uQ.xy+(a*.5+.5)*uQ.zw;vec2 c=p/uSize*2.-1.;gl_Position=vec4(c.x,-c.y,0.,1.);}`;
+      const FS = `precision highp float;
+uniform sampler2D uB;uniform vec2 uSize,uWin,uOff,uLd;uniform vec4 uRect,uTint;uniform vec3 uRc;uniform float uMode,uDpr,uRad,uBez,uKk,uDs,uBev,uRim;
+float sdr(vec2 p){vec2 c=uRect.xy+uRect.zw*.5;vec2 q=abs(p-c)-(uRect.zw*.5-vec2(uRad));return min(max(q.x,q.y),0.)+length(max(q,0.))-uRad;}
+vec3 bg(vec2 p){return texture2D(uB,clamp((p+uOff)/uWin,0.,1.)).rgb;}
+void main(){vec2 px=vec2(gl_FragCoord.x,uSize.y*uDpr-gl_FragCoord.y)/uDpr;
+if(uMode<.5){gl_FragColor=vec4(bg(px),1.);return;}
+if(uMode<1.5){float ds=sdr(px-vec2(0.,5.));gl_FragColor=vec4(0.,0.,0.,.30*(1.-smoothstep(-2.,16.,ds)));return;}
+float d=sdr(px);float aa=clamp(.5-d*uDpr,0.,1.);if(aa<=0.){gl_FragColor=vec4(0.);return;}
+float depth=-d;vec3 col;
+if(depth<uBez){vec2 n=vec2(sdr(px+vec2(.5,0.))-d,sdr(px+vec2(0.,.5))-d);n/=max(length(n),1e-4);float m=depth<=0.?1.:pow(1.-depth/uBez,2.4);vec2 dd=n*m*uKk;
+col=vec3(bg(px+dd*(1.-uDs)).r,bg(px+dd).g,bg(px+dd*(1.+uDs)).b);col=col*(1.-uTint.a)+uTint.rgb*uTint.a;float lit=-(n.x*uLd.x+n.y*uLd.y);col+=m*uBev*lit;
+float ra=max(0.,1.-depth/1.5)*uRim*(.3+.7*max(0.,lit));col=mix(col,uRc,ra);}
+else{col=bg(px)*(1.-uTint.a)+uTint.rgb*uTint.a;}
+gl_FragColor=vec4(clamp(col,0.,1.)*aa,aa);}`;
+      const sh = (t, src) => { const o = gl.createShader(t); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
+      const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(pr); if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) return false;
+      gl.useProgram(pr); const bf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+      const al = gl.getAttribLocation(pr, 'a'); gl.enableVertexAttribArray(al); gl.vertexAttribPointer(al, 2, gl.FLOAT, false, 0, 0);
+      ['uB', 'uQ', 'uSize', 'uWin', 'uOff', 'uLd', 'uRect', 'uTint', 'uRc', 'uMode', 'uDpr', 'uRad', 'uBez', 'uKk', 'uDs', 'uBev', 'uRim'].forEach(k => PGG.U[k] = gl.getUniformLocation(pr, k));
+      const t = gl.createTexture(); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, t);
+      [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]].forEach(([a, b]) => gl.texParameteri(gl.TEXTURE_2D, a, b));
+      gl.uniform1i(PGG.U.uB, 0); gl.enable(gl.BLEND);
+      cv.addEventListener('webglcontextlost', e => { e.preventDefault(); PGG.ok = false; });
+      Object.assign(PGG, { gl, cv }); PGG.ok = true;
+    } catch (e) { PGG.ok = false; }
+    return PGG.ok;
+  },
+  /* the backdrop: graphite shapes, a little calmer so the text stays readable, sized to the window */
+  wall(win) {
+    const w = Math.round(win.clientWidth || W), hh = Math.round(win.clientHeight || 844), k = w + 'x' + hh; if (PGG.WK === k) return; PGG.WK = k; PGG.WW = w; PGG.WH = hh;
+    const s = Math.min(2, window.devicePixelRatio || 1), c = mkCanvas(Math.round(w * s), Math.round(hh * s)), x = c.getContext('2d'), wl = drawWall('anthracite', 260, 0, false);
+    const sc = Math.max(c.width / wl.width, c.height / wl.height); x.drawImage(wl, (c.width - wl.width * sc) / 2, (c.height - wl.height * sc) / 2, wl.width * sc, wl.height * sc);
+    x.fillStyle = 'rgba(24,24,27,.38)'; x.fillRect(0, 0, c.width, c.height);
+    const gl = PGG.gl; gl.activeTexture(gl.TEXTURE0); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
+  },
+  hostOf(el) { return el.closest('.page, .tabpane'); },
+  add(host) { if (!host || PGG.hosts.has(host)) return; PGG.hosts.add(host); host.classList.add('pgg-host'); host._pggc = h('canvas', { class: 'pgg-c', 'aria-hidden': 'true', width: 0, height: 0 }); host.prepend(host._pggc); },
+  kick(ms = 450, host) { if (host) PGG.focus = host; PGG.hot = Math.max(PGG.hot, performance.now() + ms); if (!PGG.raf) PGG.raf = requestAnimationFrame(PGG.frame); },
+  frame() {
+    PGG.raf = 0; if (!PGG.ok) return;
+    const vis = []; for (const host of PGG.hosts) { if (!host.isConnected) { PGG.hosts.delete(host); continue; } if (host.offsetParent && !host.closest('.win.hidden')) vis.push(host); }
+    if (vis.length) {
+      /* the page being scrolled / touched owns the live canvas; any other visible page gets a copy */
+      const own = vis.includes(PGG.focus) ? PGG.focus : vis.includes(PGG.owner) ? PGG.owner : vis[vis.length - 1];
+      vis.forEach(hs => { if (hs !== own) { const k = PGG.scan(hs); if (k.key !== hs._pggk) { PGG.draw(hs, k); PGG.copy(hs); } } });
+      if (PGG.owner !== own) { if (PGG.owner && PGG.owner.isConnected && PGG.cv.width) PGG.copy(PGG.owner); PGG.owner = own; own._pggc.style.visibility = 'hidden'; own.prepend(PGG.cv); own._pggk = ''; }
+      const k = PGG.scan(own); if (k.key !== own._pggk) PGG.draw(own, k);
+    }
+    if (performance.now() < PGG.hot) PGG.raf = requestAnimationFrame(PGG.frame);
+  },
+  copy(hs) { const c = hs._pggc, cv = PGG.cv; if (c.width !== cv.width || c.height !== cv.height) { c.width = cv.width; c.height = cv.height; } c.getContext('2d').drawImage(cv, 0, 0); c.style.visibility = ''; hs._pggk = hs._pggk || 'c'; },
+  /* where the cards are, relative to the page (one layout read per card) */
+  scan(host) {
+    const w = host.clientWidth, hh = host.clientHeight, hr = host.getBoundingClientRect(), s = hr.width / (w || 1) || 1, list = []; let key = w + 'x' + hh;
+    for (const el of host.querySelectorAll('.pgl')) {
+      if (PGG.hostOf(el) !== host) continue;
+      const r = el.getBoundingClientRect(); if (!r.width || !r.height) continue;
+      const x = (r.left - hr.left) / s, y = (r.top - hr.top) / s, ew = r.width / s, eh = r.height / s;
+      if (y > hh + 30 || y + eh < -30 || x > w || x + ew < 0) continue;
+      if (el._pggR == null) el._pggR = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 12;
+      list.push([x, y, ew, eh, Math.min(el._pggR, eh / 2, ew / 2)]); key += '|' + x.toFixed(1) + ',' + y.toFixed(1) + ',' + ew.toFixed(1) + ',' + eh.toFixed(1);
+    }
+    return { w, hh, hr, s, list, key };
+  },
+  draw(host, k) {
+    const win = host.closest('.win'); if (!win) return; PGG.wall(win);
+    const { w, hh, hr, s, list, key } = k; if (w < 4 || hh < 4) return; host._pggk = key;
+    const dpr = Math.min(2, window.devicePixelRatio || 1), cw = Math.round(w * dpr), ch = Math.round(hh * dpr), gl = PGG.gl, U = PGG.U, cv = PGG.cv;
+    if (cv.width !== cw || cv.height !== ch) { cv.width = cw; cv.height = ch; }
+    const wr = win.getBoundingClientRect(), look = LGX.plateLook(true, {});
+    gl.viewport(0, 0, cw, ch);
+    gl.uniform2f(U.uSize, w, hh); gl.uniform2f(U.uWin, PGG.WW, PGG.WH); gl.uniform2f(U.uOff, (hr.left - wr.left) / s, (hr.top - wr.top) / s);
+    gl.uniform2f(U.uLd, look.lx == null ? -.5 : look.lx, look.ly == null ? -.85 : look.ly); gl.uniform1f(U.uDpr, dpr);
+    gl.uniform1f(U.uDs, look.disp); gl.uniform1f(U.uBev, look.bevel); gl.uniform1f(U.uRim, look.rim);
+    gl.uniform4f(U.uTint, look.tint[0] / 255, look.tint[1] / 255, look.tint[2] / 255, look.tint[3]); const rc = look.rc / 255; gl.uniform3f(U.uRc, rc, rc, rc);
+    gl.blendFunc(gl.ONE, gl.ZERO); gl.uniform1f(U.uMode, 0); gl.uniform4f(U.uQ, 0, 0, w, hh); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.blendFunc(gl.ZERO, gl.ONE_MINUS_SRC_ALPHA); gl.uniform1f(U.uMode, 1);
+    for (const [x, y, ew, eh, R] of list) { gl.uniform4f(U.uRect, x, y, ew, eh); gl.uniform1f(U.uRad, R); gl.uniform4f(U.uQ, x - 18, y - 14, ew + 36, eh + 40); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); }
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); gl.uniform1f(U.uMode, 2);
+    for (const [x, y, ew, eh, R] of list) {
+      gl.uniform4f(U.uRect, x, y, ew, eh); gl.uniform1f(U.uRad, R); gl.uniform1f(U.uBez, Math.max(3, Math.min(LGX.cfg.bezel, R * .9, Math.min(ew, eh) * .4)));
+      gl.uniform1f(U.uKk, -.5 * look.refr * (Math.min(ew, eh) < 70 ? .7 : 1)); gl.uniform4f(U.uQ, x - 1, y - 1, ew + 2, eh + 2); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    }
+  },
+  install(win) {
+    win.classList.add('pgg-on');
+    const sweep = () => { $$(PGL.SEL, win).forEach(el => { if (!el.classList.contains('pgl')) el.classList.add('pgl'); PGG.add(PGG.hostOf(el)); }); PGG.kick(); };
+    const deb = debounce(sweep, 30);
+    new MutationObserver(ms => { if (ms.some(m => m.type === 'childList')) deb(); else PGG.kick(); }).observe(win, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+    win.addEventListener('scroll', e => PGG.kick(250, e.target.closest && PGG.hostOf(e.target)), { capture: true, passive: true });
+    ['pointerdown', 'pointerup', 'pointercancel'].forEach(t => win.addEventListener(t, e => PGG.kick(400, e.target.closest && PGG.hostOf(e.target)), { passive: true }));
+    addEventListener('resize', () => { PGG.WK = ''; PGG.hosts.forEach(hs => hs._pggk = ''); PGG.kick(); });
+    sweep();
+  },
+};
 const PGL = {
   T: 0, tile: null, url: '', src: null, io: null,
   SEL: '.list > .li, .group > .li, .vmc, .dial-k .key, .pad:has(> .tf), .seg, .ct-ai, .bub.them, .cmp-box, .typing',
@@ -5448,7 +5558,8 @@ const PGL = {
     PGL.M = M; PGL.src = { data: y.getImageData(0, 0, sc.width, sc.height).data, w: sc.width, h: sc.height, d: 1, W: w, H: sc.height };
   },
   install(win) {
-    PGL.prep(); win.classList.add('pgl-on', 'dark-scope');
+    win.classList.add('pgl-on', 'dark-scope'); if (PGG.init()) { PGL.gpu = true; return PGG.install(win); }
+    PGL.prep();
     /* plates are drawn ahead of time (900 px before they scroll in) and a few per frame, so scrolling never stalls */
     if (!PGL.io) PGL.io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) PGL.queue(e.target); else { PGL.q.delete(e.target); PGL.free(e.target); } }), { rootMargin: '900px 0px' });
     const sweep = debounce(() => PGL.sweep(win), 50); new MutationObserver(sweep).observe(win, { childList: true, subtree: true }); PGL.sweep(win);
@@ -5491,7 +5602,7 @@ app('telephone', {
     const TABS = [{ id: 'messages', icon: 'chat', label: 'Messages' }, { id: 'recents', icon: 'schedule', label: 'Récents' }, { id: 'contacts', icon: 'person', label: 'Contacts' }, { id: 'pad', icon: 'dialpad', label: 'Clavier' }, { id: 'voicemail', icon: 'voicemail', label: 'Vocaux' }];
     const nav = GlassBar(TABS.filter(t => t.id !== 'pad'), tab, t => show(t), { side: TABS.find(t => t.id === 'pad'), source: () => { const p = host.querySelector('.tabpane:not(.off)'); return p && (p.firstElementChild || p); } });
     ctx.root(h('div', { class: 'page lg-page' }, host, nav));
-    PGL.install(ctx.win); ctx.onShow(() => { if (PGL.W !== W) { PGL.prep(); $$('.pgl', ctx.win).forEach(el => { el._pglk = ''; if (el._pglOn) PGL.render(el); }); } });
+    PGL.install(ctx.win); ctx.onShow(() => { if (PGL.gpu) return PGG.kick(); if (PGL.W !== W) { PGL.prep(); $$('.pgl', ctx.win).forEach(el => { el._pglk = ''; if (el._pglOn) PGL.render(el); }); } });
     let lastY = 0;
     ctx.onShow(() => nav.refresh());
     TABS.forEach(t => { panes[t.id] = h('div', { class: 'tabpane off' }); host.append(panes[t.id]); });
