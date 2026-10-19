@@ -2268,6 +2268,8 @@ function Slider(val, { min = 0, max = 1, step = 0, big = false, icon = null, oni
 const LGX = {
   cfg: { refr: 70, disp: 0, bezel: 22, frost: 0, tint: .16, brefr: 36, mag: 1.15 },
   scroller(page) { if (!page) return null; if (page.classList.contains('scroll')) return page; const o = getComputedStyle(page).overflowY; if ((o === 'auto' || o === 'scroll') && page.scrollHeight > page.clientHeight) return page; return page.querySelector('.scroll'); },
+  /* canvas size only (the plates compute their own shape) */
+  dims(W, H, dpr) { return { w: Math.round(W * dpr), h: Math.round(H * dpr), W, H }; },
   field(W, H, bezel, dpr, bulge, R, ext) {
     const offT = ext && ext.t ? 400 : 0, Hv = H + offT + (ext && ext.b ? 400 : 0);
     const w = Math.round(W * dpr), h = Math.round(H * dpr), vx = new Float32Array(w * h), vy = new Float32Array(w * h), r = Math.min(R == null ? H / 2 : R, Hv / 2, W / 2);
@@ -2650,7 +2652,7 @@ function GlassBar(items, active, onchange, { source, side } = {}) {
     if (dirty) { dirty = false; if (srcPage) { try { src = LGX.raster(srcPage, dpr); ver++; } catch (e) { src = null; } } }
     physics();
     if (!src) return;
-    const k = pw + '|' + dpr; if (fkey !== k) { fkey = k; fP = LGX.field(pw, 64, c.bezel, dpr, .35); fD = LGX.field(64, 64, c.bezel, dpr, .35); ver++; xB = null; }
+    const k = pw + '|' + dpr; if (fkey !== k) { fkey = k; fP = LGX.dims(pw, 64, dpr); fD = LGX.dims(64, 64, dpr); ver++; xB = null; }
     const sc = LGX.scroller(srcPage), st = sc ? sc.scrollTop : 0, pgR = srcPage.getBoundingClientRect(), plR = pill.getBoundingClientRect();
     const ox = (plR.left - pgR.left) / SC, oy = (plR.top - pgR.top) / SC + st, dk = dark();
     const pk = [st, ver, ox.toFixed(1), oy.toFixed(1), dk].join('|');
@@ -2724,7 +2726,7 @@ function GlassDock(content, { source, side } = {}) {
     el.classList.remove('lgx-thru');
     if (dirty && srcPage) { dirty = false; try { src = LGX.raster(srcPage, dpr); ver++; } catch (e) { src = null; } }
     if (!src) return;
-    const k = pw + '|' + ph + '|' + dpr; if (fkey !== k) { fkey = k; f = LGX.field(pw, ph, c.bezel, dpr, .35); if (dot) fD = LGX.field(ph, ph, c.bezel, dpr, .35); ver++; }
+    const k = pw + '|' + ph + '|' + dpr; if (fkey !== k) { fkey = k; f = LGX.dims(pw, ph, dpr); if (dot) fD = LGX.dims(ph, ph, dpr); ver++; }
     const sc = LGX.scroller(srcPage), st = sc ? sc.scrollTop : 0, pgR = srcPage.getBoundingClientRect(), plR = pill.getBoundingClientRect();
     const ox = (plR.left - pgR.left) / SC, oy = (plR.top - pgR.top) / SC + st, dark = D.documentElement.dataset.mode !== 'light';
     const key = [st, ver, ox.toFixed(1), oy.toFixed(1), dark].join('|'); if (key === last) return; last = key;
@@ -2741,7 +2743,7 @@ function GlassDock(content, { source, side } = {}) {
     const out1 = !wsrc || sy < wsrc.y0 + 60 || sy + vh > wsrc.y1 - 60;
     if ((out1 || wdirty) && (out1 && !wsrc || now2 - wT > 140)) { wT = now2; wdirty = false; try { wsrc = LGX.rasterDoc(doc, Math.max(0, sy - 500), sy + vh + 700, 1); ver++; } catch (e) { wsrc = null; } }
     if (!wsrc) return;
-    const k = pw + '|' + ph + '|' + dpr; if (fkey !== k) { fkey = k; f = LGX.field(pw, ph, c.bezel, dpr, .35); ver++; }
+    const k = pw + '|' + ph + '|' + dpr; if (fkey !== k) { fkey = k; f = LGX.dims(pw, ph, dpr); ver++; }
     const frR = fr.getBoundingClientRect(), plR = pill.getBoundingClientRect(), ox = (plR.left - frR.left) / SC, oy = (plR.top - frR.top) / SC + sy - wsrc.y0;
     const key = ['w', sy, ver, ox.toFixed(1), oy.toFixed(1)].join('|'); if (key === last) return; last = key;
     if (pc.width !== f.w || pc.height !== f.h) { pc.width = f.w; pc.height = f.h; out = null; } const x = pc.getContext('2d'); if (!out) out = x.createImageData(f.w, f.h);
@@ -2887,7 +2889,8 @@ async function wallURL(key = S.settings.wallpaper) {
   if (!WALLCACHE.has(ck)) WALLCACHE.set(ck, drawWall(key, S.settings.hue, S.settings.cm, light).toDataURL('image/jpeg', .9));
   return WALLCACHE.get(ck);
 }
-async function applyWall() { const u = await wallURL(); L.wall.style.backgroundImage = `url("${u}")`; setTimeout(() => homeGlass(), 50); const lw = $('.lwall', L.lock); if (lw) lw.style.backgroundImage = `url("${u}")`; }
+let WALLV = 0; /* bumped when the wallpaper changes (reading the wallpaper's data URL back is costly) */
+async function applyWall() { const u = await wallURL(); L.wall.style.backgroundImage = `url("${u}")`; WALLV++; setTimeout(() => homeGlass(), 50); const lw = $('.lwall', L.lock); if (lw) lw.style.backgroundImage = `url("${u}")`; }
 
 /* ---------- Status bar ---------- */
 const BATT = { level: .82, charging: false };
@@ -2944,7 +2947,7 @@ const WIDGETS = {
 const WG = { key: '', src: null, fields: new Map() };
 function wallSrc() {
   const sr = SCR.getBoundingClientRect(), Wd = Math.round(sr.width / SC), Hd = Math.round(sr.height / SC), wi = GOV.wallImg(), dpr = Math.min(2, window.devicePixelRatio || 1);
-  const key = [L.wall.style.backgroundImage, Wd, Hd, dpr, D.documentElement.dataset.mode, !!wi].join('|'); if (WG.key === key && WG.src) return WG.src;
+  const key = [WALLV, Wd, Hd, dpr, D.documentElement.dataset.mode, !!wi].join('|'); if (WG.key === key && WG.src) return WG.src;
   const cv = mkCanvas(Math.round(Wd * dpr), Math.round(Hd * dpr)), x = cv.getContext('2d'); x.scale(dpr, dpr);
   x.fillStyle = getComputedStyle(L.wall).backgroundColor || '#141714'; x.fillRect(0, 0, Wd, Hd);
   if (wi) { const k = Math.max(Wd / wi.naturalWidth, Hd / wi.naturalHeight), w = wi.naturalWidth * k, hh = wi.naturalHeight * k; x.drawImage(wi, (Wd - w) / 2, (Hd - hh) / 2, w, hh); }
@@ -3567,7 +3570,7 @@ const GOV = {
   color(v) { const p = h('i', { style: `position:absolute;width:0;height:0;color:${v}` }); SCR.append(p); const c = getComputedStyle(p).color; p.remove(); return c; },
   target() { return OS.locked ? L.lock : (OS.mode === 'app' && OS.wins[OS.current]) ? OS.wins[OS.current].el : L.home; },
   wallImg() {
-    const m = (L.wall.style.backgroundImage || '').match(/url\("?(.*?)"?\)/), u = m ? m[1] : '';
+    if (GOV.wallV !== WALLV) { const m = (L.wall.style.backgroundImage || '').match(/url\("?(.*?)"?\)/); GOV.wallU = m ? m[1] : ''; GOV.wallV = WALLV; } const u = GOV.wallU;
     if (!u) return null; if (GOV.wall.url === u) return GOV.wall.img && GOV.wall.img.complete && GOV.wall.img.naturalWidth ? GOV.wall.img : null;
     const img = new Image(); GOV.wall = { url: u, img }; img.onload = () => { const w = OS.overlay; if (w === 'cc' || w === 'shade') { GOV.take(); GOV.backdrop(w); } }; img.src = u; return null;
   },
@@ -3677,14 +3680,14 @@ const GOV = {
       if (key !== el._lgk) { el._lgk = key; el._lgt = t; el._lghi = false; }
       else if (el._lghi || t - el._lgt < 140) return;
       const moving = t - el._lgt < 140, dpr = moving ? 1 : s.d; if (!moving) el._lghi = true;
-      const ex = el._lgext || (grp ? { t: jt, b: jb } : null), fk = [w, hh, Math.round(R), dpr, jt, jb, !!el._lgext].join('|'); let f = GOV.fields.get(fk);
+      const ex = el._lgext || (grp ? { t: jt, b: jb } : null), bnr = !!el.closest('#banner'), isPlate = (!ex && !el.classList.contains('ncard')) || bnr, fk = [w, hh, Math.round(R), dpr, jt, jb, !!el._lgext, isPlate].join('|'); let f = GOV.fields.get(fk);
+      if (!f && isPlate) { f = LGX.dims(w, hh, dpr); GOV.fields.set(fk, f); } /* plates draw their own shape: no refraction field needed */
       if (!f) { f = LGX.field(w, hh, Math.min(cfg.bezel, R * .9), dpr, grp ? .12 : .3, R, ex); GOV.fields.set(fk, f); if (GOV.fields.size > 60) GOV.fields.delete(GOV.fields.keys().next().value); }
       if (cv.width !== f.w || cv.height !== f.h) { cv.width = f.w; cv.height = f.h; }
       const x = cv.getContext('2d'), out = x.createImageData(f.w, f.h), cx = w / 2, cy = hh / 2;
       const rl = (r.left - s.rect.left) / SC, rt = (r.top - s.rect.top) / SC;
       if (on && !prim) prim = GOV.color('var(--primary)');
-      const bnr = !!el.closest('#banner');
-      if ((!ex && !el.classList.contains('ncard')) || bnr) { /* glass plate like the drop: bent edge, bevel, specular rim; tinted with the theme colour when on */
+      if (isPlate) { /* glass plate like the drop: bent edge, bevel, specular rim; tinted with the theme colour when on */
         const pr2 = on ? LGX.rgb(prim) : null, look = LGX.plateLook(dark, { R, refr: cfg.refr * (Math.min(w, hh) < 80 ? .75 : 1), mag: 1 / sc, bezel: Math.min(cfg.bezel, R * .9) });
         if (on) look.tint = [pr2[0], pr2[1], pr2[2], dark ? .5 : .55];
         if (bnr) { look.tint = dark ? [30, 30, 36, .34] : [246, 246, 250, .40]; look.refr = cfg.refr; } /* live banner: the same glass plate, a little more tint so the text stays readable over any app */
@@ -3963,7 +3966,7 @@ const BGL = {
   take(force) {
     const t = GOV.target(), dpr = Math.min(2, window.devicePixelRatio || 1), wi = GOV.wallImg();
     const tr = t.getBoundingClientRect(), br = L.banner.getBoundingClientRect(), maxH = Math.max(120, (Math.max(br.bottom, tr.top + 200 * SC) - tr.top) / SC + 48);
-    const src = BGL.scrollSrc(t), UP = 260, DN = 520;
+    const src = BGL.scrollSrc(t), UP = 420, DN = 900;
     const base = LGX.raster(t, dpr, { flat: true, maxH, skip: src && src.sc ? src.sc : null, noFrame: !!(src && src.fr), under: (x, W, H) => { if (!wi) return; const k = Math.max(W / wi.naturalWidth, H / wi.naturalHeight), w = wi.naturalWidth * k, hh = wi.naturalHeight * k; x.drawImage(wi, (W - w) / 2, (H - hh) / 2, w, hh); } });
     let lay = null, clip = null;
     if (src && src.sc) { const r = src.sc.getBoundingClientRect(); clip = [(r.left - tr.left) / SC, (r.top - tr.top) / SC, r.width / SC, r.height / SC]; lay = LGX.raster(t, dpr, { flat: true, clear: true, only: src.sc, y0: -UP, maxH: maxH + UP + DN }).cv; }
@@ -3982,8 +3985,10 @@ const BGL = {
   },
   /* fingerprint of the screen behind, scrolling apart: which app, where it is */
   sign() {
-    const t = GOV.target(); if (!t) return ''; const r = t.getBoundingClientRect();
-    return [OS.mode, OS.current, OS.locked, r.left.toFixed(0), r.top.toFixed(0), r.width.toFixed(0), L.wall.style.backgroundImage.length, D.documentElement.dataset.mode, t.querySelector('.br-ext iframe') ? 1 : 0].join('|');
+    /* no layout read here (that alone made scrolling stutter on the phone): which screen is behind,
+       and the app window's own animation state */
+    const t = GOV.target(); if (!t) return '';
+    return [OS.mode, OS.current, OS.locked, t.style.transform, t.style.opacity, t.className.length, WALLV, D.documentElement.dataset.mode].join('|');
   },
   show(card) {
     try {
@@ -3997,13 +4002,13 @@ const BGL = {
     if (!BGL.snap || (!on && tn > BGL.until)) { BGL.running = false; return; }
     try {
       const sg = BGL.sign();
-      if (sg !== BGL.sig) { if (tn - BGL.tT > 110) { BGL.sig = sg; BGL.take(); } }
+      if (sg !== BGL.sig) { if (tn - BGL.tT > 110) { BGL.sig = sg; BGL.take(); BGL.again = [tn + 260, tn + 620]; } } /* new screen behind: captured now and again once its opening animation is over */
+      else if (BGL.again && BGL.again.length && tn >= BGL.again[0]) { BGL.again.shift(); BGL.take(); }
       else if (BGL.L) {
         const Ly = BGL.L, cur = BGL.scrollOf(Ly.src), d = cur - Ly.s0;
         if (d !== (Ly.d || 0) && tn - (BGL.cT || 0) > 28) { Ly.d = d; BGL.lastScroll = tn; BGL.cT = tn; /* glass follows the scroll at ~30 fps: half the work, still fluid */
           if (d < -Ly.UP + 20 || d > Ly.DN - 20) { if (tn - BGL.tT > 110) BGL.take(); } else BGL.compose(d); }
         else if (d !== (Ly.d || 0)) BGL.lastScroll = tn;
-        else if (d !== 0 && tn - BGL.lastScroll > 220 && tn - BGL.tT > 220) BGL.take(); /* scrolling stopped: fresh layers */
       }
     } catch (e) { }
     try { GOV.paintIn(L.banner, BGL.snap, BGL.ver); } catch (e) { }
