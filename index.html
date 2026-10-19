@@ -2187,8 +2187,36 @@ const LGX = {
     }
   },
   imgVer: 0, imgs: new Map(),
-  img(u) { let im = LGX.imgs.get(u); if (!im) { im = new Image(); im.onload = () => { LGX.imgVer++; }; im.src = u; LGX.imgs.set(u, im); if (LGX.imgs.size > 40) LGX.imgs.delete(LGX.imgs.keys().next().value); } return im.complete && im.naturalWidth ? im : null; },
+  img(u) { let im = LGX.imgs.get(u); if (!im) { im = new Image(); if (/^\/api\/p\?/.test(u)) im.crossOrigin = 'anonymous'; im.onload = () => { LGX.imgVer++; }; im.src = u; LGX.imgs.set(u, im); if (LGX.imgs.size > 40) LGX.imgs.delete(LGX.imgs.keys().next().value); } return im.complete && im.naturalWidth ? im : null; },
   fit(x, src, sw, sh, b, mode) { if (!sw || !sh) return; let w = b.w, hh = b.h; if (mode === 'contain' || mode === 'cover') { const k = mode === 'contain' ? Math.min(b.w / sw, b.h / sh) : Math.max(b.w / sw, b.h / sh); w = sw * k; hh = sh * k; } x.save(); x.beginPath(); x.rect(b.l, b.t, b.w, b.h); x.clip(); x.drawImage(src, b.l + (b.w - w) / 2, b.t + (b.h - hh) / 2, w, hh); x.restore(); },
+  /* Rasterise a band [y0, y1] (document coordinates) of a same-origin web page shown in an iframe
+     (websites opened through the Vercel proxy): backgrounds, images (re-fetched through the proxy so
+     the canvas stays readable) and text. Only elements crossing the band are measured. */
+  rasterDoc(doc, y0, y1, dpr) {
+    const win = doc.defaultView, sy = win.scrollY || doc.documentElement.scrollTop || 0, W = Math.max(1, doc.documentElement.clientWidth || win.innerWidth), H = Math.max(1, Math.round(y1 - y0));
+    const cv = mkCanvas(Math.round(W * dpr), Math.round(H * dpr)), x = cv.getContext('2d'); x.scale(dpr, dpr);
+    let bgc = '#fff'; for (const e of [doc.body, doc.documentElement]) { if (!e) continue; const b = win.getComputedStyle(e).backgroundColor; if (b && b !== 'transparent' && !/,\s*0\)$/.test(b)) { bgc = b; break; } }
+    x.fillStyle = bgc; x.fillRect(0, 0, W, H);
+    const P = u => '/api/p?url=' + encodeURIComponent(u), rg = doc.createRange();
+    const els = doc.body ? doc.body.getElementsByTagName('*') : [];
+    for (let i = 0; i < els.length; i++) {
+      const el = els[i], tg = el.tagName; if (tg === 'SCRIPT' || tg === 'STYLE' || tg === 'NOSCRIPT' || tg === 'svg' || el.closest('svg')) continue;
+      const r = el.getBoundingClientRect(); if (r.width < 1 || r.height < 1) continue; const top = r.top + sy; if (top > y1 || top + r.height < y0) continue;
+      const cs = win.getComputedStyle(el); if (cs.visibility === 'hidden' || +cs.opacity === 0) continue;
+      const b = { l: r.left, t: top - y0, w: r.width, h: r.height }; x.globalAlpha = +cs.opacity || 1;
+      if (tg === 'IMG') { const s = el.currentSrc || el.src; if (s && /^https?:/.test(s)) { const im = LGX.img(P(s)); if (im) try { LGX.fit(x, im, im.naturalWidth, im.naturalHeight, b, cs.objectFit); } catch (e) { } } continue; }
+      const bg = cs.backgroundColor; if (bg && bg !== 'transparent' && !/,\s*0\)$/.test(bg)) { x.fillStyle = bg; x.beginPath(); const rr = Math.min(parseFloat(cs.borderTopLeftRadius) || 0, b.w / 2, b.h / 2); if (x.roundRect) x.roundRect(b.l, b.t, b.w, b.h, rr); else x.rect(b.l, b.t, b.w, b.h); x.fill(); }
+      const bim = cs.backgroundImage; if (bim && bim !== 'none') { const mm = bim.match(/url\("?(.*?)"?\)/); if (mm && /^https?:/.test(mm[1])) { const im = LGX.img(P(mm[1])); if (im) try { LGX.fit(x, im, im.naturalWidth, im.naturalHeight, b, /contain/.test(cs.backgroundSize) ? 'contain' : 'cover'); } catch (e) { } } }
+      for (const tn of el.childNodes) {
+        if (tn.nodeType !== 3 || !tn.data.trim()) continue;
+        x.fillStyle = cs.color; x.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`; x.textBaseline = 'middle'; x.textAlign = 'left';
+        const re = /\S+/g; let m;
+        while ((m = re.exec(tn.data))) { rg.setStart(tn, m.index); rg.setEnd(tn, m.index + m[0].length); const q = rg.getClientRects()[0]; if (!q) continue; const qt = q.top + sy; if (qt > y1 || qt + q.height < y0) continue; x.fillText(cs.textTransform === 'uppercase' ? m[0].toUpperCase() : m[0], q.left, qt - y0 + q.height / 2); }
+      }
+    }
+    x.globalAlpha = 1;
+    return { data: x.getImageData(0, 0, cv.width, cv.height).data, w: cv.width, h: cv.height, d: dpr, W, H, cv, y0, y1 };
+  },
   /* Rasterise a Harold OS page (backgrounds, photos, canvases, avatar shapes, icons, text) into content coordinates. */
   raster(page, dpr, opt = {}) {
     const pr = page.getBoundingClientRect(), sc = opt.flat ? null : LGX.scroller(page), st = sc ? sc.scrollTop : 0;
@@ -2508,8 +2536,12 @@ function GlassDock(content, { source, side } = {}) {
     const dpr = Math.min(2, window.devicePixelRatio || 1), c = LGX.cfg, pw = Math.round(pill.clientWidth), ph = Math.round(pill.clientHeight); if (!pw || !ph) return;
     if (!srcPage || !srcPage.isConnected) { watch(); }
     if (imgV !== LGX.imgVer) { imgV = LGX.imgVer; dirty = true; }
-    /* a real website (cross-origin iframe) cannot be read: the glass becomes clear tinted glass over it */
-    const thru = !!(srcPage && srcPage.querySelector && srcPage.querySelector('iframe')); el.classList.toggle('lgx-thru', thru); if (thru) return;
+    /* a website in an iframe: real Liquid Glass when it comes through the proxy (same origin, readable);
+       otherwise (other origin) it cannot be read and the glass becomes clear tinted glass over it */
+    const fr = srcPage && srcPage.querySelector ? srcPage.querySelector('iframe') : null;
+    if (fr) { let doc = null; try { doc = fr.contentDocument; if (doc && (!doc.body || doc.URL === 'about:blank')) doc = null; } catch (e) { doc = null; }
+      el.classList.toggle('lgx-thru', !doc); if (!doc) return; return frameDoc(fr, doc, dpr, c, pw, ph); }
+    el.classList.remove('lgx-thru');
     if (dirty && srcPage) { dirty = false; try { src = LGX.raster(srcPage, dpr); ver++; } catch (e) { src = null; } }
     if (!src) return;
     const k = pw + '|' + ph + '|' + dpr; if (fkey !== k) { fkey = k; f = LGX.field(pw, ph, c.bezel, dpr, .35); if (dot) fD = LGX.field(ph, ph, c.bezel, dpr, .35); ver++; }
@@ -2519,6 +2551,21 @@ function GlassDock(content, { source, side } = {}) {
     if (pc.width !== f.w || pc.height !== f.h) { pc.width = f.w; pc.height = f.h; out = null; } const x = pc.getContext('2d'); if (!out) out = x.createImageData(f.w, f.h);
     LGX.lens(f, src, ox, oy, c.refr, c.disp, 1, 1, out); x.putImageData(out, 0, 0);
     if (dot && fD) { const dR = dot.getBoundingClientRect(), dx = (dR.left - pgR.left) / SC, dy = (dR.top - pgR.top) / SC + st; if (dc.width !== fD.w) { dc.width = fD.w; dc.height = fD.h; dOut = null; } const dctx = dc.getContext('2d'); if (!dOut) dOut = dctx.createImageData(fD.w, fD.h); LGX.lens(fD, src, dx, dy, c.refr, c.disp, 1, 1, dOut); dctx.putImageData(dOut, 0, 0); }
+  };
+  /* proxied website: raster a band around the visible part, re-raster when scrolling leaves it */
+  let wsrc = null, wdoc = null, wmo = null, wdirty = true, wT = 0;
+  const frameDoc = (fr, doc, dpr, c, pw, ph) => {
+    const win = doc.defaultView, sy = win.scrollY || 0, vh = win.innerHeight || 800, now2 = performance.now();
+    if (doc !== wdoc) { wdoc = doc; wsrc = null; wdirty = true; if (wmo) wmo.disconnect(); wmo = new MutationObserver(debounce(() => { wdirty = true; }, 300)); wmo.observe(doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style', 'src'] }); try { win.addEventListener('load', () => { wdirty = true; }); } catch (e) { } }
+    if (imgV !== LGX.imgVer) { imgV = LGX.imgVer; wdirty = true; }
+    const out1 = !wsrc || sy < wsrc.y0 + 60 || sy + vh > wsrc.y1 - 60;
+    if ((out1 || wdirty) && (out1 && !wsrc || now2 - wT > 140)) { wT = now2; wdirty = false; try { wsrc = LGX.rasterDoc(doc, Math.max(0, sy - 500), sy + vh + 700, 1); ver++; } catch (e) { wsrc = null; } }
+    if (!wsrc) return;
+    const k = pw + '|' + ph + '|' + dpr; if (fkey !== k) { fkey = k; f = LGX.field(pw, ph, c.bezel, dpr, .35); ver++; }
+    const frR = fr.getBoundingClientRect(), plR = pill.getBoundingClientRect(), ox = (plR.left - frR.left) / SC, oy = (plR.top - frR.top) / SC + sy - wsrc.y0;
+    const key = ['w', sy, ver, ox.toFixed(1), oy.toFixed(1)].join('|'); if (key === last) return; last = key;
+    if (pc.width !== f.w || pc.height !== f.h) { pc.width = f.w; pc.height = f.h; out = null; } const x = pc.getContext('2d'); if (!out) out = x.createImageData(f.w, f.h);
+    LGX.lens(f, wsrc, ox, oy, c.refr, c.disp, 1, 1, out); x.putImageData(out, 0, 0);
   };
   const loop = () => { if (!alive) return; try { frame(); } catch (e) { } requestAnimationFrame(loop); }; requestAnimationFrame(loop);
   new ResizeObserver(() => { dirty = true; }).observe(el);
@@ -5076,6 +5123,9 @@ const ACTUS = [
   { t: 'Cinq conseils pour mieux dormir', c: 'Bien-être', d: 2, p: ['Se coucher à heure fixe, même le week-end, aide le corps à trouver son rythme.', 'Limiter les écrans une heure avant de dormir et garder la chambre fraîche, autour de 18 °C.', 'Enfin, une courte marche en fin de journée favorise un sommeil plus profond.'] },
   { t: 'Le vélo en ville a le vent en poupe', c: 'Mobilité', d: 3, p: ['Les nouvelles pistes cyclables ont fait grimper le nombre de trajets à vélo cette année.', 'Les vélos à assistance électrique séduisent particulièrement pour les trajets de plus de cinq kilomètres.', 'Pensez au casque et à un bon éclairage maintenant que les jours raccourcissent.'] },
 ];
+/* Is the Vercel proxy there? (only on the online version) */
+const BR_PROXY = { ok: false };
+try { if ((/^https:/.test(location.protocol) || location.hostname === 'localhost') && !/claude\.ai$|claudeusercontent|anthropic/.test(location.hostname)) fetch('/api/p?ping=1').then(r => r.ok ? r.json() : null).then(j => { BR_PROXY.ok = !!(j && j.ok); }).catch(() => { }); } catch (e) { }
 app('navigateur', {
   name: 'Navigateur', icon: 'public', tone: 'i', cat: 'Web et cartes', keys: 'internet web site recherche',
   create(ctx) {
@@ -5089,6 +5139,15 @@ app('navigateur', {
     const watchScroll = sc => { let lastY = 0; sc.addEventListener('scroll', () => { const y = sc.scrollTop, d = y - lastY; if (y < 12) compact(false); else if (d > 6) compact(true); else if (d < -6) compact(false); if (Math.abs(d) > 6) lastY = y; }, { passive: true }); };
     /* a real site lives in another origin: its scrolling can't be seen, so touching the page shrinks the bar */
     window.addEventListener('blur', () => setTimeout(() => { const a = D.activeElement; if (a && a.tagName === 'IFRAME' && view.contains(a)) compact(true); }, 0));
+    /* proxied site: links and searches stay in Harold's browser, scrolling drives the compact bar */
+    const hookSite = fr => {
+      let doc; try { doc = fr.contentDocument; } catch (e) { return; } if (!doc || !doc.body) return; const win = doc.defaultView;
+      try { const mu = doc.querySelector('meta[name="hos-url"]'), fu = new URL((mu && mu.content) || stack[idx]); if (fu.href !== stack[idx] && isExt(fu.href)) { stack[idx] = fu.href; B.last = fu.href; drawBar(); } } catch (e) { }
+      doc.addEventListener('click', e => { const a = e.target.closest && e.target.closest('a[href]'); if (!a) return; const raw = a.getAttribute('href') || ''; if (raw.startsWith('#')) return; const href = a.href; if (!/^https?:/.test(href)) return; e.preventDefault(); go(href); }, true);
+      doc.addEventListener('submit', e => { const f = e.target; if ((f.getAttribute('method') || 'get').toLowerCase() !== 'get') return; e.preventDefault(); try { const url = new URL(f.action || stack[idx]); new FormData(f).forEach((v, k) => url.searchParams.append(k, v)); go(url.href); } catch (er) { } }, true);
+      let lastY = win.scrollY || 0; win.addEventListener('scroll', () => { const y = win.scrollY || 0, d = y - lastY; if (y < 12) compact(false); else if (d > 6) compact(true); else if (d < -6) compact(false); if (Math.abs(d) > 6) lastY = y; }, { passive: true });
+      dock.refresh();
+    };
     const expand = () => { compact(false); const a = D.activeElement; if (a && a.tagName === 'IFRAME') try { a.blur(); window.focus(); } catch (e) { } };
     const isExt = u => /^https?:\/\//.test(u);
     const titleOf = u => { if (isExt(u)) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return u; } } const k = u.replace('harold://', '').split(/[/?]/)[0]; if (k === 'actus' && u.split('/')[3]) return ACTUS[+u.split('/')[3]].t; return (WEB[k] || WEB.accueil).t; };
@@ -5115,8 +5174,15 @@ app('navigateur', {
     const render = () => {
       const u = stack[idx]; prog.classList.add('hidden');
       if (isExt(u)) {
-        const fr = h('iframe', { src: u, title: titleOf(u), referrerpolicy: 'no-referrer', allow: 'fullscreen' }); prog.classList.remove('hidden'); fr.addEventListener('load', () => prog.classList.add('hidden'));
-        view.replaceChildren(h('div', { class: 'br-ext' }, h('div', { class: 'br-hint' }, I('info'), h('span', {}, 'Page vide ? Ce site refuse de s\'afficher dans Harold OS.'), h('a', { href: u, target: '_blank', rel: 'noopener' }, 'Ouvrir ↗')), fr));
+        /* On the online version (Vercel), websites come through our own proxy (/api/p): same origin, so the
+           glass can bend them and their scrolling is visible. Their scripts are blocked (sandbox) so a
+           site can never touch Harold OS. Elsewhere (claude.ai, file) the site is shown directly. */
+        const viaP = BR_PROXY.ok;
+        const fr = viaP ? h('iframe', { src: '/api/p?url=' + encodeURIComponent(u), title: titleOf(u), sandbox: 'allow-same-origin allow-forms', referrerpolicy: 'no-referrer' })
+          : h('iframe', { src: u, title: titleOf(u), referrerpolicy: 'no-referrer', allow: 'fullscreen' });
+        prog.classList.remove('hidden');
+        fr.addEventListener('load', () => { prog.classList.add('hidden'); if (viaP) hookSite(fr); });
+        view.replaceChildren(h('div', { class: 'br-ext' + (viaP ? ' via-p' : '') }, viaP ? null : h('div', { class: 'br-hint' }, I('info'), h('span', {}, 'Page vide ? Ce site refuse de s\'afficher dans Harold OS.'), h('a', { href: u, target: '_blank', rel: 'noopener' }, 'Ouvrir ↗')), fr));
       } else { const k = u.replace('harold://', '').split(/[/?]/)[0]; const el = (pages[k] || pages.accueil)(u), sc = h('div', { class: 'scroll br-sc' }, el); view.replaceChildren(sc); watchScroll(sc); }
       compact(false); drawBar();
     };
