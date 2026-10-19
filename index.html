@@ -2936,6 +2936,8 @@ function freshState() {
 let SC = 1, W = 390, H = 844;
 const SCR = $('#screen');
 function localPt(e) { const r = SCR.getBoundingClientRect(); return { x: (e.clientX - r.left) / SC, y: (e.clientY - r.top) / SC }; }
+/* first real child of a page (skips the glass canvases put in front of the content) */
+function firstContent(el) { return el ? ([...el.children].find(c => c.tagName !== 'CANVAS') || null) : null; }
 function screenRect(el) { const r = el.getBoundingClientRect(), s = SCR.getBoundingClientRect(); return { x: (r.left - s.left) / SC, y: (r.top - s.top) / SC, w: r.width / SC, h: r.height / SC }; }
 let _supp = 0;
 function suppressClick() { _supp = performance.now(); }
@@ -3025,7 +3027,7 @@ function Slider(val, { min = 0, max = 1, step = 0, big = false, icon = null, oni
    squishes when it lands. Pure canvas, so it behaves the same in Safari and Chrome. */
 const LGX = {
   cfg: { refr: 70, disp: 0, bezel: 22, frost: 0, tint: .16, brefr: 36, mag: 1.15 },
-  scroller(page) { if (!page) return null; if (page.classList.contains('scroll')) return page; const o = getComputedStyle(page).overflowY; if ((o === 'auto' || o === 'scroll') && page.scrollHeight > page.clientHeight) return page; return page.querySelector('.scroll'); },
+  scroller(page) { if (!page) return null; if (page.classList.contains('scroll')) return page; const o = getComputedStyle(page).overflowY; if ((o === 'auto' || o === 'scroll') && page.scrollHeight > page.clientHeight) return page; return [...page.querySelectorAll('.scroll')].find(e => e.offsetParent && e.clientHeight > 0) || null; }, /* the visible one (hidden tabs have their own) */
   /* Draw an icon (Ionicons strokes or Material fills, any viewBox) on a canvas at (ix, iy), size sz. */
   svgCache: new WeakMap(),
   drawSvg(x, svg, ix, iy, sz, col) {
@@ -3114,29 +3116,31 @@ const LGX = {
     }
   },
   /* same plate, but the content (transparent where empty) is laid over a fixed base layer (the backdrop of the glass apps) */
+  /* same plate, but the content (transparent where empty) lies over a fixed base layer (the backdrop of the glass
+     apps): the band of the screen around the plate is composited once (shared by the bar and its round button),
+     then the plain, fast plate runs on it */
   plateB(src, ox, oy, w, h, dpr, P, out) {
-    const o = out.data, W2 = out.width, H2 = out.height, s = src.data, sw = src.w, sh = src.h, sd = src.d, B = src.base, bs = B.data, bw = B.w, bd = B.d, bmX = B.w - 1, bmY = B.h - 1, bx = B.ox, by = B.oy;
-    const tint = P.tint || [40, 40, 46, .16], tr = tint[0], tg = tint[1], tb = tint[2], ta = tint[3], ia = 1 - ta, rc = P.rc == null ? 235 : P.rc;
-    const G = LGX.plateGeo(W2, H2, w, h, dpr, P), A = G.A, K = G.K, F = G.F, mX = sw - 1, mY = sh - 1;
-    const S = (fx, fy, c) => {
-      let X = ((ox + fx) * sd) | 0, Y = ((oy + fy) * sd) | 0; X = X < 0 ? 0 : X > mX ? mX : X; Y = Y < 0 ? 0 : Y > mY ? mY : Y; const q = (Y * sw + X) * 4, a = s[q + 3];
-      if (a === 255) return s[q + c];
-      let X2 = ((ox + fx + bx) * bd) | 0, Y2 = ((oy + fy + by) * bd) | 0; X2 = X2 < 0 ? 0 : X2 > bmX ? bmX : X2; Y2 = Y2 < 0 ? 0 : Y2 > bmY ? bmY : Y2; const v = bs[(Y2 * bw + X2) * 4 + c];
-      return a === 0 ? v : (s[q + c] * a + v * (255 - a)) / 255;
-    };
-    let p = 0;
-    for (let i = 0, n = W2 * H2; i < n; i++, p += 4) {
-      const al = A[i]; if (!al) { o[p + 3] = 0; continue; }
-      const f = i * 8; let r, g, b;
-      if (K[i] === 1) { r = S(F[f], F[f + 1], 0) * ia + tr * ta; g = S(F[f], F[f + 1], 1) * ia + tg * ta; b = S(F[f], F[f + 1], 2) * ia + tb * ta; }
-      else {
-        r = S(F[f], F[f + 1], 0); g = S(F[f + 2], F[f + 3], 1); b = S(F[f + 4], F[f + 5], 2);
-        const ad = F[f + 6], ra = F[f + 7];
-        r = r * ia + tr * ta + ad; g = g * ia + tg * ta + ad; b = b * ia + tb * ta + ad;
-        if (ra > 0) { const ir = 1 - ra; r = r * ir + rc * ra; g = g * ir + rc * ra; b = b * ir + rc * ra; }
+    const B = src.base, sd = src.d, sw = src.w, M = 48, y0 = Math.floor(oy - M), y1 = Math.ceil(oy + h + M);
+    const key = [y0, y1, B.ox.toFixed(2), B.oy.toFixed(2), sw, B.w].join('|');
+    let C = src._band;
+    if (!C || C.key !== key || C.data2 !== B.data) {
+      const Y0 = Math.max(0, Math.floor(y0 * sd)), Y1 = Math.min(src.h, Math.ceil(y1 * sd)), bh = Math.max(1, Y1 - Y0), n = sw * bh * 4;
+      if (!LGX._cb || LGX._cb.length < n) LGX._cb = new Uint8ClampedArray(n);
+      const d = LGX._cb, s = src.data, bs = B.data, bw = B.w, bd = B.d, bmX = B.w - 1, bmY = B.h - 1, k = bd / sd;
+      const xm = new Int32Array(sw); for (let X = 0; X < sw; X++) { let X2 = ((X / sd + B.ox) * bd) | 0; xm[X] = (X2 < 0 ? 0 : X2 > bmX ? bmX : X2) * 4; }
+      for (let Y = Y0, t = 0; Y < Y1; Y++) {
+        let Y2 = ((Y / sd + B.oy) * bd) | 0; Y2 = Y2 < 0 ? 0 : Y2 > bmY ? bmY : Y2; const rb = Y2 * bw * 4; let q = Y * sw * 4;
+        for (let X = 0; X < sw; X++, q += 4, t += 4) {
+          const a = s[q + 3], qb = rb + xm[X];
+          if (a === 255) { d[t] = s[q]; d[t + 1] = s[q + 1]; d[t + 2] = s[q + 2]; }
+          else if (a === 0) { d[t] = bs[qb]; d[t + 1] = bs[qb + 1]; d[t + 2] = bs[qb + 2]; }
+          else { const ia = 255 - a; d[t] = (s[q] * a + bs[qb] * ia) / 255; d[t + 1] = (s[q + 1] * a + bs[qb + 1] * ia) / 255; d[t + 2] = (s[q + 2] * a + bs[qb + 2] * ia) / 255; }
+          d[t + 3] = 255;
+        }
       }
-      o[p] = r; o[p + 1] = g; o[p + 2] = b; o[p + 3] = al;
+      C = src._band = { key, data2: B.data, src: { data: d, w: sw, h: bh, d: sd }, top: Y0 / sd };
     }
+    return LGX.plate(C.src, ox, oy - C.top, w, h, dpr, P, out);
   },
   geos: new Map(),
   plateGeo(W2, H2, w, h, dpr, P) {
@@ -3209,8 +3213,8 @@ const LGX = {
     const W = Math.round(pr.width / SC), H = opt.flat ? Math.round(Math.min(pr.height / SC + (opt.maxH ? 1e9 : 0), opt.maxH || 1e9)) : Math.min(4200, Math.max(Math.round(pr.height / SC), sc ? Math.round((sc.getBoundingClientRect().top - pr.top) / SC + sc.scrollHeight) : 0));
     const cv = mkCanvas(Math.round(W * dpr), Math.round(H * dpr)), x = cv.getContext('2d'); x.scale(dpr, dpr);
     /* glass apps (PGG): the backdrop is fixed and drawn separately, so the content is rastered on transparent */
-    const pgg = !!(opt.pgg && typeof PGG !== 'undefined' && PGG.ok && (page.closest('.pgg-on')));
-    if (pgg) opt = Object.assign({}, opt, { clear: true });
+    const pgg = !!((opt.pgg || opt.pggBase) && typeof PGG !== 'undefined' && PGG.ok && (page.closest('.pgg-on') || page.querySelector('.pgg-on')));
+    if (pgg && opt.pgg) opt = Object.assign({}, opt, { clear: true });
     let bgc = 'rgb(20,22,20)'; for (let e = page; e; e = e.parentElement) { const b = getComputedStyle(e).backgroundColor; if (b && b !== 'transparent' && !/^rgba\(.*,\s*0\)$/.test(b)) { bgc = b; break; } /* rgb(0, 0, 0) is black, not transparent */ }
     if (!opt.clear) { x.fillStyle = bgc; x.fillRect(0, 0, W, H); if (opt.under) try { opt.under(x, W, H); } catch (e) { } }
     const pos = r => { const inSc = sc && r._in; return { l: (r.left - pr.left) / SC, t: (r.top - pr.top) / SC + (inSc ? st : 0) - Y0, w: r.width / SC, h: r.height / SC }; };
@@ -4928,7 +4932,12 @@ const BGL = {
     const t = GOV.target(), dpr = Math.min(2, window.devicePixelRatio || 1), wi = GOV.wallImg();
     const tr = t.getBoundingClientRect(), br = L.banner.getBoundingClientRect(), maxH = Math.max(120, (Math.max(br.bottom, tr.top + 200 * SC) - tr.top) / SC + 48);
     const src = BGL.scrollSrc(t), UP = 420, DN = 900;
-    const base = LGX.raster(t, dpr, { flat: true, maxH, skip: src && src.sc ? src.sc : null, noFrame: !!(src && src.fr), under: (x, W, H) => { if (!wi) return; const k = Math.max(W / wi.naturalWidth, H / wi.naturalHeight), w = wi.naturalWidth * k, hh = wi.naturalHeight * k; x.drawImage(wi, (W - w) / 2, (H - hh) / 2, w, hh); } });
+    /* glass apps: the fixed backdrop is what lies under the content (not the home wallpaper) */
+    const gw = t.classList && (t.classList.contains('pgg-on') ? t : t.querySelector && t.querySelector('.win.pgg-on:not(.hidden)'));
+    if (gw && PGG.ok) PGG.wall(gw);
+    const base = LGX.raster(t, dpr, { flat: true, maxH, pggBase: !!gw, skip: src && src.sc ? src.sc : null, noFrame: !!(src && src.fr), under: (x, W, H) => {
+      if (gw && PGG.ok && PGG.wallC) { const wr = gw.getBoundingClientRect(); x.drawImage(PGG.wallC, (wr.left - tr.left) / SC, (wr.top - tr.top) / SC, wr.width / SC, wr.height / SC); return; }
+      if (!wi) return; const k = Math.max(W / wi.naturalWidth, H / wi.naturalHeight), w = wi.naturalWidth * k, hh = wi.naturalHeight * k; x.drawImage(wi, (W - w) / 2, (H - hh) / 2, w, hh); } });
     let lay = null, clip = null;
     if (src && src.sc) { const r = src.sc.getBoundingClientRect(); clip = [(r.left - tr.left) / SC, (r.top - tr.top) / SC, r.width / SC, r.height / SC]; lay = LGX.raster(t, dpr, { flat: true, clear: true, only: src.sc, y0: -UP, maxH: maxH + UP + DN }).cv; }
     else if (src && src.fr) { try { const d2 = src.fr.contentDocument; if (d2 && d2.body && d2.URL !== 'about:blank') { const r = src.fr.getBoundingClientRect(), sy = d2.defaultView.scrollY || 0; clip = [(r.left - tr.left) / SC, (r.top - tr.top) / SC, r.width / SC, r.height / SC]; const fy0 = clip[1]; lay = LGX.rasterDoc(d2, Math.max(0, sy - UP), sy + maxH - fy0 + DN, dpr).cv; src.off = sy - Math.max(0, sy - UP); } } catch (e) { lay = null; } }
@@ -5293,7 +5302,7 @@ app('notes', {
     host.append(panes.notes, panes.rappels);
     /* round button on the right: Nouvelle note on Notes, Nouveau rappel on Rappels */
     const sideFor = t => t === 'rappels' ? { id: 'new-rem', icon: 'add', label: 'Nouveau rappel', action: () => sr.focusNew && sr.focusNew() } : { id: 'new-note', icon: 'edit', label: 'Nouvelle note', action: () => sn.openNote && sn.openNote(null) };
-    const nav = GlassBar([{ id: 'notes', icon: 'sticky_note_2', label: 'Notes' }, { id: 'rappels', icon: 'checklist', label: 'Rappels' }], tab, t => show(t), { side: sideFor(tab), source: () => { const p = host.querySelector('.tabpane:not(.off)'); return p && (p.firstElementChild || p); } });
+    const nav = GlassBar([{ id: 'notes', icon: 'sticky_note_2', label: 'Notes' }, { id: 'rappels', icon: 'checklist', label: 'Rappels' }], tab, t => show(t), { side: sideFor(tab), source: () => { const p = host.querySelector('.tabpane:not(.off)'); return p && ([...p.children].find(c => c.tagName !== 'CANVAS') || p); } });
     ctx.root(h('div', { class: 'page lg-page' }, host, nav));
     ctx.onShow(() => nav.refresh());
     const sub = id => { const s = Object.create(ctx); s.root = page => { panes[id].append(page); return page; }; return s; };
@@ -5455,7 +5464,7 @@ app('horloge', {
   create(ctx) {
     let tab = 'alarms', raf = 0;
     const content = h('div', { class: 'glasshost', style: 'flex:1;position:relative;overflow:hidden' });
-    const nav = GlassBar([{ id: 'world', icon: 'public', label: 'Horloges' }, { id: 'alarms', icon: 'alarm', label: 'Alarmes' }, { id: 'timer', icon: 'hourglass_bottom', label: 'Minuteur' }, { id: 'chrono', icon: 'timer', label: 'Chrono' }], tab, t => { tab = t; render(); }, { source: () => content.firstElementChild });
+    const nav = GlassBar([{ id: 'world', icon: 'public', label: 'Horloges' }, { id: 'alarms', icon: 'alarm', label: 'Alarmes' }, { id: 'timer', icon: 'hourglass_bottom', label: 'Minuteur' }, { id: 'chrono', icon: 'timer', label: 'Chrono' }], tab, t => { tab = t; render(); }, { source: () => firstContent(content) });
     const pg = h('div', { class: 'page lg-page' }, content, nav); ctx.root(pg);
     const render = () => { cancelAnimationFrame(raf); content.replaceChildren(tab === 'world' ? worldView() : tab === 'alarms' ? alarmsView() : tab === 'timer' ? timerView() : chronoView()); };
     /* World clocks */
@@ -5615,7 +5624,7 @@ gl_FragColor=vec4(clamp(col,0.,1.)*aa,aa);}`;
     const s = Math.min(2, window.devicePixelRatio || 1), c = mkCanvas(Math.round(w * s), Math.round(hh * s)), x = c.getContext('2d'), lt = PGG.light(), wl = drawWall(lt ? 'clair' : 'anthracite', 260, lt ? 1 : 0, lt);
     const sc = Math.max(c.width / wl.width, c.height / wl.height); x.drawImage(wl, (c.width - wl.width * sc) / 2, (c.height - wl.height * sc) / 2, wl.width * sc, wl.height * sc);
     x.fillStyle = lt ? 'rgba(255,255,255,.28)' : 'rgba(24,24,27,.38)'; x.fillRect(0, 0, c.width, c.height);
-    PGG.wallImg = { data: x.getImageData(0, 0, c.width, c.height).data, w: c.width, h: c.height, d: s };
+    PGG.wallImg = { data: x.getImageData(0, 0, c.width, c.height).data, w: c.width, h: c.height, d: s }; PGG.wallC = c;
     const gl = PGG.gl; gl.activeTexture(gl.TEXTURE0); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
   },
   light() { return D.documentElement.dataset.mode === 'light'; },
@@ -5796,7 +5805,7 @@ app('telephone', {
     let tab = S.phoneTab || 'messages', filter = 'all', num = '';
     const host = h('div', { class: 'tabhost glass phone-host' }), panes = {};
     const TABS = [{ id: 'messages', icon: 'chat', label: 'Messages' }, { id: 'recents', icon: 'schedule', label: 'Récents' }, { id: 'contacts', icon: 'person', label: 'Contacts' }, { id: 'pad', icon: 'dialpad', label: 'Clavier' }, { id: 'voicemail', icon: 'voicemail', label: 'Vocaux' }];
-    const nav = GlassBar(TABS.filter(t => t.id !== 'pad'), tab, t => show(t), { side: TABS.find(t => t.id === 'pad'), source: () => { const p = host.querySelector('.tabpane:not(.off)'); return p && (p.firstElementChild || p); } });
+    const nav = GlassBar(TABS.filter(t => t.id !== 'pad'), tab, t => show(t), { side: TABS.find(t => t.id === 'pad'), source: () => { const p = host.querySelector('.tabpane:not(.off)'); return p && ([...p.children].find(c => c.tagName !== 'CANVAS') || p); } });
     ctx.root(h('div', { class: 'page lg-page' }, host, nav));
     ctx.onShow(() => { if (PGL.gpu) return PGG.kick(); if (!PGL.src) return; if (PGL.W !== W) { PGL.prep(); $$('.pgl', ctx.win).forEach(el => { el._pglk = ''; if (el._pglOn) PGL.render(el); }); } });
     let lastY = 0;
@@ -6606,7 +6615,7 @@ app('navigateur', {
   create(ctx) {
     const B = S.browser; let stack = [B.last || 'harold://accueil'], idx = 0;
     const view = h('div', { class: 'br-view' }), bar = h('div', { class: 'br-bar' }), prog = h('div', { class: 'br-prog hidden' });
-    const dock = GlassDock(bar, { source: () => view.firstElementChild });
+    const dock = GlassDock(bar, { source: () => firstContent(view) });
     const pg = h('div', { class: 'page br' }, view, prog, dock); ctx.root(pg);
     ctx.onShow(() => dock.refresh());
     /* the proxy answer may arrive after the page was first shown: switch the open website to it */
