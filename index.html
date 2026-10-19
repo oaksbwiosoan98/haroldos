@@ -83,6 +83,19 @@
   --lbl-shadow: 0 1px 2px rgb(255 255 255 / .6); --lockbright: .97;
   --tone-l: .9; --dot-l: .58; --av-l: .86; --av-fl: .3; --art-l: .86; --art-fl: .3;
 }
+/* Default theme "Anthracite": full black and charcoal greys, no colour (Material You monochrome) */
+:root[data-theme="anthracite"]:not([data-mode="light"]){
+  --surface: oklch(0.135 0 0); --s-lowest: oklch(0.095 0 0); --s-low: oklch(0.175 0 0); --s-c: oklch(0.2 0 0); --s-high: oklch(0.24 0 0); --s-highest: oklch(0.28 0 0);
+  --stage: oklch(0.08 0 0); --stage-a: oklch(0.16 0 0); --stage-b: oklch(0.13 0 0);
+  --primary: oklch(0.9 0 0); --on-primary: oklch(0.17 0 0); --primary-c: oklch(0.32 0 0); --on-primary-c: oklch(0.95 0 0);
+  --glass: rgb(26 26 28 / .55); --glass-hi: rgb(28 28 30 / .72); --glass-banner: rgb(34 34 36 / .88); --dock: rgb(26 26 28 / .45);
+  --veil: rgb(9 9 10 / .8); --veil-2: rgb(9 9 10 / .74); --veil-3: rgb(8 8 9 / .55); --hbar: rgb(242 242 244 / .85);
+}
+:root[data-theme="anthracite"][data-mode="light"]{
+  --glass-hi: rgb(250 250 251 / .8); --glass-banner: rgb(252 252 253 / .94);
+  --veil: rgb(245 245 246 / .82); --veil-2: rgb(245 245 246 / .78); --veil-3: rgb(241 241 242 / .55); --hbar: rgb(28 28 30 / .7);
+  --primary: oklch(0.3 0 0); --on-primary: oklch(0.98 0 0); --primary-c: oklch(0.88 0 0); --on-primary-c: oklch(0.2 0 0);
+}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%}
 body{margin:0;background:var(--stage);color:var(--on-s);font-family:var(--font);overflow:hidden;
@@ -191,7 +204,7 @@ body.full .side,body.full #hint{display:none}
 .tone-t .bg{background:var(--tertiary);color:var(--on-tertiary)}
 .tone-tc .bg{background:var(--tertiary-c);color:var(--on-tertiary-c)}
 .tone-i .bg{background:var(--inverse-s);color:var(--inverse-on-s)}
-.tone-e .bg{background:oklch(0.82 0.08 calc(var(--h) - 110));color:oklch(0.28 0.06 calc(var(--h) - 110))}
+.tone-e .bg{background:oklch(0.82 calc(0.08*min(1,var(--cm)*3)) calc(var(--h) - 110));color:oklch(0.28 calc(0.06*min(1,var(--cm)*3)) calc(var(--h) - 110))}
 #dots{position:absolute;left:0;right:0;bottom:calc(var(--sab) + 104px);display:flex;justify-content:center;gap:6px;pointer-events:none}
 #dots i{width:7px;height:7px;border-radius:4px;background:var(--dots);transition:width .4s var(--e-spatial), background .3s}
 #dots i.on{width:22px;background:var(--on-s)}
@@ -1643,6 +1656,7 @@ function oklch(L, C, H, a = 1) {
   return `rgba(${f(r)},${f(g)},${f(b)},${a})`;
 }
 const THEMES = [
+  { id: 'anthracite', name: 'Anthracite', h: 260, c: 0 },
   { id: 'sauge', name: 'Sauge', h: 145, c: 1 }, { id: 'menthe', name: 'Menthe', h: 175, c: 1.1 },
   { id: 'ocean', name: 'Océan', h: 235, c: 1.1 }, { id: 'lavande', name: 'Lavande', h: 295, c: 1 },
   { id: 'rose', name: 'Rose', h: 350, c: 1 }, { id: 'corail', name: 'Corail', h: 35, c: 1.15 },
@@ -1764,8 +1778,8 @@ function drawWall(kind, hue, cm = 1, light = false) {
   if (kind === 'anthracite') {
     /* near-neutral charcoal with crisp graphite shapes, fine light lines and one sage accent:
        strong edges everywhere so the Liquid Glass (widget, dock, bars) visibly bends what's under it */
-    const N = (L, a = 1) => oklch(L, .004, hue, a), Lw = a => (light ? 'rgba(0,0,0,' : 'rgba(255,255,255,') + a + ')';
-    vgrad(g, W, H, [[0, N(.23)], [.55, N(.17)], [1, N(.12)]]);
+    const N = (L, a = 1) => oklch(L, C(.004), hue, a), Lw = a => (light ? 'rgba(0,0,0,' : 'rgba(255,255,255,') + a + ')';
+    vgrad(g, W, H, [[0, N(.17)], [.55, N(.11)], [1, N(.065)]]); /* near black at the bottom */
     const blob = (kind2, x, y, s, rot, L0, L1, acc) => {
       const sz = W * s; g.save(); g.translate(x * W, y * H); g.rotate(rot);
       g.shadowColor = light ? 'rgba(0,0,0,.14)' : 'rgba(0,0,0,.45)'; g.shadowBlur = 50; g.shadowOffsetY = 18;
@@ -2027,6 +2041,7 @@ function ensureDefaults(S) {
   { const dl = (S.files || []).find(f => f.id === 'f-dl'); if (dl && dl.name === 'Téléchargements') dl.name = 'Téléchargés'; }
   if (S.notifSeed !== 2) { const keep = (S.notifs || []).filter(x => !['Bienvenue dans Harold OS'].includes(x.title) && !/^(Camille Durand|Wei Zhang|Appel manqué)$/.test(x.title)); S.notifs = [...keep, ...sampleNotifs()]; S.notifSeed = 2; }
   S.settings.mode = S.settings.mode || 'dark';
+  if (!S.settings.anthr2) { S.settings.anthr2 = 1; Object.assign(S.settings, { theme: 'anthracite', hue: 260, cm: 0 }); if (!String(S.settings.wallpaper).startsWith('file:')) S.settings.wallpaper = 'anthracite'; } /* default look: black / charcoal, no sage */
   if (!S.settings.anthr) { S.settings.anthr = 1; if (!String(S.settings.wallpaper).startsWith('file:')) S.settings.wallpaper = 'anthracite'; S.settings.iconShape = 'squircle'; } /* new default look, applied once */
   if (!S.weather) S.weather = { mode: 'gps', place: { name: 'Paris', lat: 48.8566, lon: 2.3522 }, cache: null };
   if (!S.map) S.map = { x: (2.3488 + 180) / 360, y: (1 - Math.log(Math.tan(48.8534 * Math.PI / 180) + 1 / Math.cos(48.8534 * Math.PI / 180)) / Math.PI) / 2, z: 12.5, layer: 'plan' };
@@ -2161,7 +2176,7 @@ function freshState() {
   ];
   return {
     v: 1,
-    settings: { owner: 'Moi', device: 'Harold Phone', theme: 'sauge', hue: 145, cm: 1, wallpaper: 'anthracite', iconShape: 'squircle', ts: 1, pin: '', sounds: true, volume: .7, vibrate: true,
+    settings: { owner: 'Moi', device: 'Harold Phone', theme: 'anthracite', hue: 260, cm: 0, wallpaper: 'anthracite', iconShape: 'squircle', ts: 1, pin: '', sounds: true, volume: .7, vibrate: true,
       wifi: true, bt: true, airplane: false, dnd: false, data: true, rotation: true, brightness: 1, autolock: 5, nightLight: false },
     home: { pages: [['calendrier', 'horloge', 'notes', 'calculatrice', 'fichiers', 'rappels', 'musique', 'parametres']], dock: ['telephone', 'navigateur', 'camera', 'galerie'], merged: true, drawer: true },
     notifs, contacts, calls, threads, notes, reminders, events, alarms, files,
@@ -2881,7 +2896,7 @@ function layout() {
 const WALLCACHE = new Map();
 async function applyTheme() {
   const s = S.settings, r = D.documentElement.style;
-  D.documentElement.dataset.mode = isLightNow() ? 'light' : 'dark';
+  D.documentElement.dataset.mode = isLightNow() ? 'light' : 'dark'; D.documentElement.dataset.theme = s.theme || '';
   r.setProperty('--h', s.hue); r.setProperty('--cm', s.cm); r.setProperty('--ts', s.ts);
   r.setProperty('--icon-shape', `var(--shape-${s.iconShape})`);
   $('meta[name=theme-color]') && $('meta[name=theme-color]').setAttribute('content', isLightNow() ? oklch(.975, .006 * s.cm, s.hue) : oklch(.165, .009 * s.cm, s.hue));
