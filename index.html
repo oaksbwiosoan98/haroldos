@@ -2582,6 +2582,13 @@ function ensureDefaults(S) {
   if (S.notifSeed !== 2) { const keep = (S.notifs || []).filter(x => !['Bienvenue dans Harold OS'].includes(x.title) && !/^(Camille Durand|Wei Zhang|Appel manqué)$/.test(x.title)); S.notifs = [...keep, ...sampleNotifs()]; S.notifSeed = 2; }
   S.settings.mode = S.settings.mode || 'dark';
   if (S.home) { S.home.pages = (S.home.pages || []).map(pg => pg.filter(id => id !== 'parametres')); S.home.dock = (S.home.dock || []).filter(id => id !== 'parametres'); if (S.home.cells) delete S.home.cells.parametres; } /* no Settings app any more */
+  /* every app on the home screen by default (the dock counts), each one once, no alias or system entry */
+  if (S.home && !S.home.allApps1) { S.home.allApps1 = 1;
+    const ok = id => APPS[id] && !APPS[id].alias && !APPS[id].system, dock = [...new Set((S.home.dock || []).filter(ok))].slice(0, 4);
+    const page = [...new Set((S.home.pages[0] || []).filter(id => ok(id) && !dock.includes(id)))];
+    Object.values(APPS).filter(a => ok(a.id) && !dock.includes(a.id) && !page.includes(a.id)).forEach(a => { if (page.length < 16) page.push(a.id); });
+    S.home.dock = dock; S.home.pages = [page]; if (S.home.cells) Object.keys(S.home.cells).forEach(k => { if (!page.includes(k)) delete S.home.cells[k]; });
+  }
   S.settings.iconShape = 'squircle'; /* iOS: app icons are always the continuous-corner squircle */
   if (!S.settings.anthr2) { S.settings.anthr2 = 1; Object.assign(S.settings, { theme: 'anthracite', hue: 260, cm: 0 }); if (!String(S.settings.wallpaper).startsWith('file:')) S.settings.wallpaper = 'anthracite'; } /* default look: black / charcoal, no sage */
   if (!S.settings.anthr) { S.settings.anthr = 1; if (!String(S.settings.wallpaper).startsWith('file:')) S.settings.wallpaper = 'anthracite'; S.settings.iconShape = 'squircle'; } /* new default look, applied once */
@@ -2720,7 +2727,7 @@ function freshState() {
     v: 1,
     settings: { owner: 'Moi', device: 'Harold Phone', theme: 'anthracite', hue: 260, cm: 0, wallpaper: 'anthracite', iconShape: 'squircle', ts: 1, pin: '', sounds: true, volume: .7, vibrate: true,
       wifi: true, bt: true, airplane: false, dnd: false, data: true, rotation: true, brightness: 1, autolock: 5, nightLight: false },
-    home: { pages: [['calendrier', 'horloge', 'notes', 'calculatrice', 'fichiers', 'rappels', 'musique']], dock: ['telephone', 'navigateur', 'camera', 'galerie'], merged: true, drawer: true },
+    home: { pages: [['calendrier', 'horloge', 'notes', 'calculatrice', 'fichiers', 'musique', 'meteo', 'plans', 'mail', 'dictaphone']], dock: ['telephone', 'navigateur', 'camera', 'galerie'], merged: true, drawer: true },
     notifs, contacts, calls, threads, notes, reminders, events, alarms, files,
     timer: { dur: 300, endAt: null, left: 300, running: false },
     chrono: { start: null, acc: 0, laps: [] },
