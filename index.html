@@ -1476,7 +1476,7 @@ body.full .screen{bottom:calc(env(safe-area-inset-bottom, 0px) + 30px);border-ra
    ===================================================================== */
 
 /* ---------- 1. System colours ---------- */
-:root{
+:root,.dark-scope{
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", "Inter", system-ui, sans-serif;
   --ios-red: #FF453A; --ios-green: #30D158; --ios-orange: #FF9F0A; --ios-blue: #0A84FF; --ios-yellow: #FFD60A;
   --bg: #000; --bg2: #1C1C1E; --bg3: #2C2C2E; --bg4: #3A3A3C;
@@ -1511,7 +1511,7 @@ body.full .screen{bottom:calc(env(safe-area-inset-bottom, 0px) + 30px);border-ra
   --cell: #fff; --grouped: #F2F2F7;
 }
 /* accent (tint): white / black with the Anthracite theme, the theme colour otherwise */
-:root[data-theme="anthracite"]{ --primary: #fff; --on-primary: #000; --primary-c: var(--bg3); --on-primary-c: var(--label); --tint: #fff }
+:root[data-theme="anthracite"],:root[data-theme="anthracite"] .dark-scope{ --primary: #fff; --on-primary: #000; --primary-c: var(--bg3); --on-primary-c: var(--label); --tint: #fff }
 :root[data-theme="anthracite"][data-mode="light"]{ --primary: #000; --on-primary: #fff; --primary-c: #E5E5EA; --on-primary-c: #000; --tint: #000 }
 :root:not([data-theme="anthracite"]){ --tint: var(--primary) }
 
@@ -2026,6 +2026,7 @@ textarea.tf{padding:11px 14px}
 #home.edit .ico .rm{display:none!important}
 
 /* ---------- Téléphone in Liquid Glass (see PGL) ---------- */
+.pgl-on{color:var(--label)}
 .pgl-on .page,.pgl-on .tabpane,.pgl-on .lg-page{background:#000}
 .pgl-on .scroll,.pgl-on .dial,.pgl-on .composer{position:relative;isolation:isolate}
 .pgl-bg{position:absolute;left:0;top:0;width:100%;z-index:-1;pointer-events:none}
@@ -2702,7 +2703,7 @@ function morePhoneData(S) {
 function ensureDefaults(S) {
   { const dl = (S.files || []).find(f => f.id === 'f-dl'); if (dl && dl.name === 'Téléchargements') dl.name = 'Téléchargés'; }
   if (S.notifSeed !== 2) { const keep = (S.notifs || []).filter(x => !['Bienvenue dans Harold OS'].includes(x.title) && !/^(Camille Durand|Wei Zhang|Appel manqué)$/.test(x.title)); S.notifs = [...keep, ...sampleNotifs()]; S.notifSeed = 2; }
-  S.settings.mode = S.settings.mode || 'dark';
+  S.settings.mode = 'dark'; /* apps stay black (no Settings app to change it) */
   if (S.home) { S.home.pages = (S.home.pages || []).map(pg => pg.filter(id => id !== 'parametres')); S.home.dock = (S.home.dock || []).filter(id => id !== 'parametres'); if (S.home.cells) delete S.home.cells.parametres; } /* no Settings app any more */
   /* every app on the home screen by default (the dock counts), each one once, no alias or system entry */
   if (S.home && !S.home.allApps1) { S.home.allApps1 = 1;
@@ -4119,7 +4120,7 @@ function cardAt(x, y) { const s = cardScale(), cw = W * s, ch = H * s; for (let 
 /* ---------- Gesture zones ---------- */
 function isLightNow() { const m = (S && S.settings.mode) || 'dark'; if (m === 'auto') { const hr = new Date().getHours(); return hr >= 7 && hr < 20; } return m === 'light'; }
 function updateGz() {
-  const tw = OS.mode === 'app' && OS.wins[OS.current]; L.sbar.classList.toggle('dark-scope', !!(tw && !OS.locked && tw.ctx.top() && tw.ctx.top().classList.contains('dark-scope')));
+  const tw = OS.mode === 'app' && OS.wins[OS.current]; L.sbar.classList.toggle('dark-scope', !!(tw && !OS.locked && (tw.el.classList.contains('dark-scope') || (tw.ctx.top() && tw.ctx.top().classList.contains('dark-scope')))));
   const w = OS.mode === 'app' && OS.wins[OS.current];
   L['gz-left'].style.display = w && w.ctx.depth() > 0 && !OS.locked && !OS.overlay ? 'block' : 'none';
   L.hbar.style.opacity = OS.off || OS.booting ? 0 : 1;
@@ -5441,13 +5442,13 @@ const PGL = {
   prep() {
     if (PGL.src && PGL.W === W) return;
     const w = Math.round(W), wall = drawWall('anthracite', 260, 0, false), th = Math.round(w * wall.height / wall.width);
-    const tile = mkCanvas(w, th * 2), x = tile.getContext('2d'); x.drawImage(wall, 0, 0, w, th); x.save(); x.translate(0, th * 2); x.scale(1, -1); x.drawImage(wall, 0, 0, w, th); x.restore();
+    const tile = mkCanvas(w, th * 2), x = tile.getContext('2d'); x.drawImage(wall, 0, 0, w, th); x.save(); x.translate(0, th * 2); x.scale(1, -1); x.drawImage(wall, 0, 0, w, th); x.restore(); x.fillStyle = 'rgba(24,24,27,.38)'; x.fillRect(0, 0, w, th * 2); /* calmer shapes: text stays readable on the glass */
     PGL.W = W; PGL.T = th * 2; PGL.url = tile.toDataURL('image/jpeg', .9);
     const M = 120, sc = mkCanvas(w, PGL.T + 2 * M), y = sc.getContext('2d'); y.drawImage(tile, 0, M); y.drawImage(tile, 0, M - PGL.T); y.drawImage(tile, 0, M + PGL.T);
     PGL.M = M; PGL.src = { data: y.getImageData(0, 0, sc.width, sc.height).data, w: sc.width, h: sc.height, d: 1, W: w, H: sc.height };
   },
   install(win) {
-    PGL.prep(); win.classList.add('pgl-on');
+    PGL.prep(); win.classList.add('pgl-on', 'dark-scope');
     /* plates are drawn ahead of time (900 px before they scroll in) and a few per frame, so scrolling never stalls */
     if (!PGL.io) PGL.io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) PGL.queue(e.target); else { PGL.q.delete(e.target); PGL.free(e.target); } }), { rootMargin: '900px 0px' });
     const sweep = debounce(() => PGL.sweep(win), 50); new MutationObserver(sweep).observe(win, { childList: true, subtree: true }); PGL.sweep(win);
