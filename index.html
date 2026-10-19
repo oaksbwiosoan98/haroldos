@@ -1382,6 +1382,10 @@ input[type=date].tf,input[type=time].tf{padding-right:10px}
 :root[data-mode="light"] .br .lgdock.lgx-thru .lgx-tint{background:rgba(250,250,252,.12)}
 .br .lgdock .br-addr{background:rgba(255,255,255,.06)}
 :root:not([data-mode="light"]) .br .lgdock .br-addr span,:root:not([data-mode="light"]) .br .lgdock .ib .ms{text-shadow:0 0 4px rgba(0,0,0,.55)}
+/* Téléphone: new message / new contact live in the round button of the bottom bar */
+.phone-host .tabpane > .page > .fab{display:none}
+/* the fake phone stops above the real phone's home-gesture zone: black band below */
+body.full .screen{bottom:calc(env(safe-area-inset-bottom, 0px) + 30px);border-radius:0 0 30px 30px}
 </style>
 </head>
 <body>
@@ -2373,7 +2377,7 @@ function GlassBar(items, active, onchange, { source, side } = {}) {
   const pc = h('canvas', { class: 'lgx-c', 'aria-hidden': 'true' }), dc = h('canvas', { class: 'lgx-c', 'aria-hidden': 'true' }), gc = h('canvas', { class: 'lgx-goo', 'aria-hidden': 'true' });
   const tabs = items.map((it, i) => h('button', { class: 'lgx-tab', type: 'button', 'data-id': it.id, 'aria-label': it.label, onclick: () => pick(it.id) }, h('span', { class: 'lgx-ico' }, I(it.icon)), h('span', { class: 'lgx-lb' }, it.label)));
   const pill = h('div', { class: 'lgx-pill' }, pc, h('div', { class: 'lgx-tint' }), h('div', { class: 'lgx-tabs', style: { gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` } }, tabs), gc);
-  const sideBtn = side ? h('button', { class: 'lgx-tab lgx-sideb', type: 'button', 'aria-label': side.label, onclick: () => pick(side.id) }, h('span', { class: 'lgx-ico' }, I(side.icon))) : null;
+  const sideBtn = side ? h('button', { class: 'lgx-tab lgx-sideb', type: 'button', 'aria-label': side.label, onclick: () => { if (side.action) { buzz(8); side.action(); } else pick(side.id); } }, h('span', { class: 'lgx-ico' }, I(side.icon))) : null;
   const dot = side ? h('div', { class: 'lgx-dot' }, dc, h('div', { class: 'lgx-tint' }), sideBtn) : null;
   const accP = h('i', { 'aria-hidden': 'true', style: 'position:absolute;width:0;height:0;overflow:hidden;color:var(--lgx-acc)' });
   const el = h('nav', { class: 'lgbar lgx' + (side ? ' has-side' : ''), 'aria-label': 'Navigation' }, pill, dot, accP);
@@ -2522,6 +2526,9 @@ function GlassBar(items, active, onchange, { source, side } = {}) {
   try { D.fonts && D.fonts.ready.then(() => { dirty = true; }); } catch (e) { } setTimeout(() => dirty = true, 600); setTimeout(() => dirty = true, 1600);
   bus.on('settings', () => { dirty = true; pKey = ''; gKey = ''; bKey = ''; });
   el.set = id => goTo(id, false);
+  /* the round button can change with the tab (e.g. Clavier / Nouveau message / Nouveau contact) */
+  el.setSide = s => { if (!sideBtn || !s || (s.id === side.id && s.icon === side.icon)) return; side = s; sideBtn.setAttribute('aria-label', s.label); const ic = $('.lgx-ico', sideBtn);
+    ic.animate([{ transform: 'scale(1)', opacity: 1 }, { transform: 'scale(.4)', opacity: 0 }], { duration: 110, easing: 'ease-in' }).onfinish = () => { paint(); ic.animate([{ transform: 'scale(.4)', opacity: 0 }, { transform: 'scale(1.12)', opacity: 1, offset: .7 }, { transform: 'scale(1)', opacity: 1 }], { duration: 260, easing: 'ease-out' }); }; };
   el.compact = () => { };
   el.sync = () => { };
   el.refresh = () => { dirty = true; pKey = ''; gKey = ''; setTimeout(watch, 40); };
@@ -4281,7 +4288,7 @@ app('telephone', {
   quick: [{ icon: 'edit', label: 'Nouveau message', link: { compose: true } }, { icon: 'dialpad', label: 'Clavier', link: { tab: 'pad' } }, { icon: 'person_add', label: 'Nouveau contact', link: { add: true } }],
   create(ctx) {
     let tab = S.phoneTab || 'messages', filter = 'all', num = '';
-    const host = h('div', { class: 'tabhost glass' }), panes = {};
+    const host = h('div', { class: 'tabhost glass phone-host' }), panes = {};
     const TABS = [{ id: 'messages', icon: 'chat', label: 'Messages' }, { id: 'recents', icon: 'schedule', label: 'Récents' }, { id: 'contacts', icon: 'person', label: 'Contacts' }, { id: 'pad', icon: 'dialpad', label: 'Clavier' }, { id: 'voicemail', icon: 'voicemail', label: 'Vocaux' }];
     const nav = GlassBar(TABS.filter(t => t.id !== 'pad'), tab, t => show(t), { side: TABS.find(t => t.id === 'pad'), source: () => { const p = host.querySelector('.tabpane:not(.off)'); return p && (p.firstElementChild || p); } });
     ctx.root(h('div', { class: 'page lg-page' }, host, nav));
@@ -4292,7 +4299,10 @@ app('telephone', {
     const msg = sub('messages'), con = sub('contacts');
     APPS.messages.create(msg); APPS.contacts.create(con);
     const markSeen = () => { if (tab === 'recents' && ctx.visible()) { S.callsSeenAt = now(); save('calls'); refreshBadges(); } };
-    const show = t => { tab = t; S.phoneTab = t; persist(); nav.set(t); nav.compact(false); lastY = 0; Object.entries(panes).forEach(([k, p]) => p.classList.toggle('off', k !== t)); if (t === 'recents' || t === 'pad' || t === 'voicemail') render(); markSeen(); };
+    /* round button on the right: Nouveau message on Messages, Nouveau contact on Contacts, Clavier elsewhere */
+    const PAD = TABS.find(x => x.id === 'pad');
+    const sideFor = t => t === 'messages' ? { id: 'new-msg', icon: 'edit', label: 'Nouveau message', action: () => msg.compose && msg.compose() } : t === 'contacts' ? { id: 'new-contact', icon: 'person_add', label: 'Nouveau contact', action: () => con.edit && con.edit(null) } : PAD;
+    const show = t => { tab = t; S.phoneTab = t; persist(); nav.set(t); nav.setSide(sideFor(t)); nav.compact(false); lastY = 0; Object.entries(panes).forEach(([k, p]) => p.classList.toggle('off', k !== t)); if (t === 'recents' || t === 'pad' || t === 'voicemail') render(); markSeen(); };
     const callIcon = c => c.type === 'missed' ? I('call_missed', '') : c.type === 'in' ? I('call_received') : I('call_made');
     const recents = () => {
       const v = h('div', { class: 'scroll', style: 'height:100%' });
@@ -4346,7 +4356,7 @@ app('messages', {
   quick: [{ icon: 'edit', label: 'Nouveau message', link: { compose: true } }],
   create(ctx) {
     const pg = ctx.page({ title: 'Messages', large: true }); const list = h('div'); pg.scroll.append(list);
-    pg.append(Fab('edit', () => pickContact(), { label: 'Nouveau' })); ctx.root(pg);
+    pg.append(Fab('edit', () => pickContact(), { label: 'Nouveau' })); ctx.compose = () => pickContact(); ctx.root(pg);
     let openId = null, thRender = null;
     const last = t => t.msgs[t.msgs.length - 1];
     const draw = () => {
@@ -5682,11 +5692,8 @@ const KB = {
   D.addEventListener('keydown', e => { if (OS.locked && OS.pinKeys && !OS.off) OS.pinKeys(e.key); });
 
   setInterval(tick, 1000); tick();
-  setTimeout(() => {
-    anim(L.boot, [{ opacity: 1 }, { opacity: 0 }], 'calm').then(() => { L.boot.style.display = 'none'; });
-    OS.booting = false; updateGz();
-    anim($('.lc', L.lock), [{ transform: 'scale(.9)', opacity: 0 }, { transform: 'none', opacity: 1 }], 'slow').then(() => $('.lc', L.lock).getAnimations().forEach(a => a.cancel()));
-  }, 1700);
+  /* no boot screen: straight to the lock screen */
+  L.boot.style.display = 'none'; OS.booting = false; updateGz();
 })();
 
 </script>
