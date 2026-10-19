@@ -3543,12 +3543,20 @@ function wallSrc() {
   const cv = mkCanvas(Math.round(Wd * dpr), Math.round(Hd * dpr)), x = cv.getContext('2d'); x.scale(dpr, dpr);
   x.fillStyle = getComputedStyle(L.wall).backgroundColor || '#141714'; x.fillRect(0, 0, Wd, Hd);
   if (wi) { const k = Math.max(Wd / wi.naturalWidth, Hd / wi.naturalHeight), w = wi.naturalWidth * k, hh = wi.naturalHeight * k; x.drawImage(wi, (Wd - w) / 2, (Hd - hh) / 2, w, hh); }
-  WG.key = key; WG.src = { data: x.getImageData(0, 0, cv.width, cv.height).data, w: cv.width, h: cv.height, d: dpr, W: Wd, H: Hd };
+  WG.key = key; WG.src = { data: x.getImageData(0, 0, cv.width, cv.height).data, w: cv.width, h: cv.height, d: dpr, W: Wd, H: Hd, cv };
   return WG.src;
 }
-function wallGlass(el, R, target = el, cookie = false) {
+/* the wallpaper as seen through the search screen (darkened by its veil): what the glass icons there bend */
+function veilSrc() {
+  const w = wallSrc(), col = getComputedStyle(L.search).backgroundColor || 'rgba(0,0,0,.7)', key = WG.key + '|' + col;
+  if (WG.vkey === key && WG.vsrc) return WG.vsrc;
+  const cv = mkCanvas(w.w, w.h), x = cv.getContext('2d'); x.drawImage(w.cv, 0, 0); x.fillStyle = col; x.fillRect(0, 0, w.w, w.h);
+  WG.vkey = key; WG.vsrc = { data: x.getImageData(0, 0, w.w, w.h).data, w: w.w, h: w.h, d: w.d, W: w.W, H: w.H, cv };
+  return WG.vsrc;
+}
+function wallGlass(el, R, target = el, cookie = false, src0 = null) {
   if (!el || !el.isConnected) return;
-  const src = wallSrc(), sr = SCR.getBoundingClientRect(), dr = el.getBoundingClientRect(), dw = Math.round(el.offsetWidth), dh = Math.round(el.offsetHeight); if (!dw || !dh) return;
+  const src = src0 || wallSrc(), sr = SCR.getBoundingClientRect(), dr = el.getBoundingClientRect(), dw = Math.round(el.offsetWidth), dh = Math.round(el.offsetHeight); if (!dw || !dh) return;
   const c = target.querySelector(':scope > .lgx-c') || h('canvas', { class: 'lgx-c', 'aria-hidden': 'true' }), d = src.d, cw = Math.round(dw * d), ch = Math.round(dh * d);
   if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; }
   const cx = c.getContext('2d'), out = cx.createImageData(cw, ch), sc = dr.width / SC / dw;
@@ -3558,11 +3566,13 @@ function wallGlass(el, R, target = el, cookie = false) {
 }
 function homeGlass(tries = 0) {
   if (!GOV.wallImg() && /url\(/.test(L.wall.style.backgroundImage || '') && tries < 25) { setTimeout(() => homeGlass(tries + 1), 200); return; }
-  wallGlass($('#dock'), 34); $$('.wd', L.home).forEach(glassWidget); $$('.hpage > .ico, #dock .ico', L.home).forEach(iconGlass);
+  wallGlass($('#dock'), 34); $$('.wd', L.home).forEach(glassWidget); $$('.hpage > .ico, #dock .ico', L.home).forEach(ic => iconGlass(ic));
 }
 /* App icons in Liquid Glass: each icon is a small glass plate (iOS rounded square) bending the wallpaper
    behind it, with its white glyph on top. */
-function iconGlass(ico) { const sh = ico && $('.sh', ico), bg = sh && $('.bg', sh); if (!bg) return; ico.classList.add('gl'); wallGlass(sh, Math.round(sh.offsetWidth * .25), bg); }
+function iconGlass(ico, src = null) { const sh = ico && $('.sh', ico), bg = sh && $('.bg', sh); if (!bg) return; ico.classList.add('gl'); wallGlass(sh, Math.round(sh.offsetWidth * .25), bg, false, src); }
+/* search screen: suggested / found apps are glass icons too (once the screen has slid in) */
+function searchGlass(res) { const go = () => { if (!res.isConnected) return; try { const v = veilSrc(); $$('.sapps .ico', res).forEach(ic => iconGlass(ic, v)); } catch (e) { } }; requestAnimationFrame(go); setTimeout(go, 380); }
 const dockGlass = () => homeGlass();
 function glassWidget(el) { if (el.classList.contains('wd-clock')) wallGlass(el, el.offsetWidth / 2, $('.shape', el), true); else wallGlass(el, 28); }
 /* Home screen: an invisible grid of 4 columns × 6 rows (the dock is apart). The top 2 rows hold the
@@ -4513,7 +4523,7 @@ function renderSearch(q, res) {
   const mark = el => { if (first) { el.dataset.first = '1'; first = false; } return el; };
   if (!nq) {
     out.push(h('div', { class: 'sect' }, 'Suggestions'), h('div', { class: 'sapps' }, [...new Set([...OS.running, 'messages', 'notes', 'calendrier', 'camera', 'musique', 'meteo'])].slice(0, 8).map(id => { const ic = appIcon(id); ic.onclick = () => launch(id); return ic; })));
-    res.replaceChildren(...out); return;
+    res.replaceChildren(...out); searchGlass(res); return;
   }
   if (/^[\d\s.,+\-*/×÷()%]+$/.test(q) && /[+\-*/×÷%]/.test(q)) { const r = calcEval(q); if (r != null && isFinite(r)) out.push(mark(h('div', { class: 'calc', onclick: () => launch('calculatrice', { expr: q }) }, h('small', {}, q + ' ='), CALC.fmt(r)))); }
   const apps = Object.values(APPS).filter(a => !a.alias && !a.system).filter(a => norm(a.name).includes(nq) || (a.keys && norm(a.keys).includes(nq)));
@@ -4526,7 +4536,7 @@ function renderSearch(q, res) {
   sec('Rappels', S.reminders.filter(r => norm(r.text).includes(nq)).map(r => Li({ lead: Lic(r.done ? 'task_alt' : 'radio_button_unchecked'), title: r.text, onclick: () => launch('rappels') })));
   sec('Fichiers', S.files.filter(f => !f.trashed && norm(f.name).includes(nq)).map(f => Li({ lead: Lic(fileIcon(f)), title: f.name, sub: f.kind === 'folder' ? 'Dossier' : fmtSize(f.size), onclick: () => launch('fichiers', { file: f.id }) })));
   if (!out.length) out.push(Empty('search_off', 'Aucun résultat pour « ' + q + ' »'));
-  res.replaceChildren(...out);
+  res.replaceChildren(...out); searchGlass(res);
 }
 
 /* ---------- Notifications ---------- */
