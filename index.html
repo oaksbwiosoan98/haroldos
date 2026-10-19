@@ -1981,8 +1981,8 @@ textarea.tf{padding:11px 14px}
 .lhead h1{padding:0 16px}
 .lhead .acts{margin:0;padding:var(--sat) 8px 0 16px}
 /* Messages conversation header: avatar above the name, centred */
-.topbar.thr-top{height:78px;align-items:flex-start;padding-top:2px}
-.thr-who{position:absolute;left:96px;right:96px;top:0;display:flex;flex-direction:column;align-items:center;gap:3px;pointer-events:none}
+.topbar.thr-top{height:92px;align-items:flex-start;padding-top:14px}
+.thr-who{position:absolute;left:96px;right:96px;top:12px;display:flex;flex-direction:column;align-items:center;gap:3px;pointer-events:none}
 .thr-who h2{position:static;font-size:12px;font-weight:400;color:var(--label)}
 .thr-top > .ib,.thr-top > .bk{margin-top:0}
 
@@ -2055,7 +2055,7 @@ textarea.tf{padding:11px 14px}
 .pgl-on .dial-k .key{border-radius:50%}
 .pgl-on .key:active{transform:scale(.94)}
 .pgl-on .ct-ai{border-radius:18px}
-.pgl-on .bub.them,.pgl-on .bub.them.last{border-radius:20px!important;color:#fff}
+.pgl-on .bub.them,.pgl-on .bub.them.last,.pgl-on .bub.me,.pgl-on .bub.me.last{border-radius:20px!important;color:#fff}
 .pgl-on .typing{border-radius:20px}
 .pgl-on .cmp-box{border-radius:20px;box-shadow:none}
 .pgl-on .composer{background:transparent}
@@ -5511,7 +5511,7 @@ gl_FragColor=vec4(clamp(col,0.,1.)*aa,aa);}`;
       const x = (r.left - hr.left) / s, y = (r.top - hr.top) / s, ew = r.width / s, eh = r.height / s;
       if (y > hh + 30 || y + eh < -30 || x > w || x + ew < 0) continue;
       if (el._pggR == null) el._pggR = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 12;
-      list.push([x, y, ew, eh, Math.min(el._pggR, eh / 2, ew / 2)]); key += '|' + x.toFixed(1) + ',' + y.toFixed(1) + ',' + ew.toFixed(1) + ',' + eh.toFixed(1);
+      list.push([x, y, ew, eh, Math.min(el._pggR, eh / 2, ew / 2), el.classList.contains('me')]); key += '|' + x.toFixed(1) + ',' + y.toFixed(1) + ',' + ew.toFixed(1) + ',' + eh.toFixed(1);
     }
     return { w, hh, hr, s, list, key };
   },
@@ -5525,12 +5525,13 @@ gl_FragColor=vec4(clamp(col,0.,1.)*aa,aa);}`;
     gl.uniform2f(U.uSize, w, hh); gl.uniform2f(U.uWin, PGG.WW, PGG.WH); gl.uniform2f(U.uOff, (hr.left - wr.left) / s, (hr.top - wr.top) / s);
     gl.uniform2f(U.uLd, look.lx == null ? -.5 : look.lx, look.ly == null ? -.85 : look.ly); gl.uniform1f(U.uDpr, dpr);
     gl.uniform1f(U.uDs, look.disp); gl.uniform1f(U.uBev, look.bevel); gl.uniform1f(U.uRim, look.rim);
-    gl.uniform4f(U.uTint, look.tint[0] / 255, look.tint[1] / 255, look.tint[2] / 255, look.tint[3]); const rc = look.rc / 255; gl.uniform3f(U.uRc, rc, rc, rc);
+    const tint = (t, c) => { gl.uniform4f(U.uTint, t[0] / 255, t[1] / 255, t[2] / 255, t[3]); gl.uniform3f(U.uRc, c[0] / 255, c[1] / 255, c[2] / 255); }, T0 = look.tint, C0 = [look.rc, look.rc, look.rc]; let blue = false; tint(T0, C0);
     gl.blendFunc(gl.ONE, gl.ZERO); gl.uniform1f(U.uMode, 0); gl.uniform4f(U.uQ, 0, 0, w, hh); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     gl.blendFunc(gl.ZERO, gl.ONE_MINUS_SRC_ALPHA); gl.uniform1f(U.uMode, 1);
     for (const [x, y, ew, eh, R] of list) { gl.uniform4f(U.uRect, x, y, ew, eh); gl.uniform1f(U.uRad, R); gl.uniform4f(U.uQ, x - 18, y - 14, ew + 36, eh + 40); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); }
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); gl.uniform1f(U.uMode, 2);
-    for (const [x, y, ew, eh, R] of list) {
+    for (const [x, y, ew, eh, R, me] of list) {
+      if (me !== blue) { blue = me; if (me) tint(PGL.BLUE, PGL.BLUE_RC); else tint(T0, C0); } /* our own messages: glass with a blue tint and blue glints */
       gl.uniform4f(U.uRect, x, y, ew, eh); gl.uniform1f(U.uRad, R); gl.uniform1f(U.uBez, Math.max(3, Math.min(LGX.cfg.bezel, R * .9, Math.min(ew, eh) * .4)));
       gl.uniform1f(U.uKk, -.5 * look.refr * (Math.min(ew, eh) < 70 ? .7 : 1)); gl.uniform4f(U.uQ, x - 1, y - 1, ew + 2, eh + 2); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
@@ -5548,7 +5549,8 @@ gl_FragColor=vec4(clamp(col,0.,1.)*aa,aa);}`;
 };
 const PGL = {
   T: 0, tile: null, url: '', src: null, io: null,
-  SEL: '.list > .li, .group > .li, .vmc, .dial-k .key, .pad:has(> .tf), .seg, .ct-ai, .bub.them, .cmp-box, .typing',
+  SEL: '.list > .li, .group > .li, .vmc, .dial-k .key, .pad:has(> .tf), .seg, .ct-ai, .bub.them, .bub.me, .cmp-box, .typing',
+  BLUE: [0, 122, 255, .42], BLUE_RC: [150, 200, 255],
   prep() {
     if (PGL.src && PGL.W === W) return;
     const w = Math.round(W), wall = drawWall('anthracite', 260, 0, false), th = Math.round(w * wall.height / wall.width);
@@ -5588,7 +5590,7 @@ const PGL = {
     let c = el._pglc; if (!c) { c = el._pglc = h('canvas', { class: 'pgl-c', 'aria-hidden': 'true' }); el.prepend(c); }
     const cw = Math.round(w * dpr), ch = Math.round(hh * dpr); if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; }
     const x = c.getContext('2d'), out = x.createImageData(cw, ch), syo = ((oy % PGL.T) + PGL.T) % PGL.T + PGL.M;
-    LGX.plate(PGL.src, ox, syo, w, hh, dpr, LGX.plateLook(true, { R, bezel: Math.min(LGX.cfg.bezel, R * .9, hh * .4), refr: LGX.cfg.refr * (Math.min(w, hh) < 70 ? .7 : 1) }), out); x.putImageData(out, 0, 0);
+    LGX.plate(PGL.src, ox, syo, w, hh, dpr, LGX.plateLook(true, { ...(el.classList.contains('me') ? { tint: PGL.BLUE, rc: 200 } : {}), R, bezel: Math.min(LGX.cfg.bezel, R * .9, hh * .4), refr: LGX.cfg.refr * (Math.min(w, hh) < 70 ? .7 : 1) }), out); x.putImageData(out, 0, 0);
   },
 };
 /* ---------- Téléphone ---------- */
