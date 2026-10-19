@@ -2029,6 +2029,7 @@ textarea.tf{padding:11px 14px}
 .pgl-on{color:var(--label)}
 .pgl-on .page,.pgl-on .tabpane,.pgl-on .lg-page{background:var(--bg)}
 .pgl-on .scroll,.pgl-on .dial,.pgl-on .composer{position:relative;isolation:isolate}
+.pgl-on .page.cx{isolation:isolate}
 .pgg-host{isolation:isolate}
 .pgg-c{position:absolute;left:0;top:0;width:100%;height:100%;z-index:-1;pointer-events:none}
 .pgg-on .scroll,.pgg-on .dial,.pgg-on .composer,.pgg-on .msgs{background:transparent!important}
@@ -2062,6 +2063,28 @@ textarea.tf{padding:11px 14px}
 .pgl-on .cmp-box{border-radius:20px;box-shadow:none}
 .pgl-on .composer{background:transparent}
 .pgl-on .sect{margin:22px 28px 8px;color:var(--label2)}
+/* ---------- every app in Liquid Glass (same PGL/PGG plates) ---------- */
+.pgl-on .bub.me{--gt:0 122 255 .78}
+.pgl-on .cx-k.op,.pgl-on .cx-k.eq{--gt:255 149 0 .82;color:#fff!important}
+.pgl-on .cx-k{box-shadow:none!important}
+.pgl-on .btn.filled,.pgl-on .chip.on{--gt:0 122 255 .8;color:#fff!important}
+.pgl-on .btn.tonal,.pgl-on .chip{box-shadow:none!important}
+.pgl-on .ncd{box-shadow:none!important;border-radius:20px!important}
+.pgl-on .evc{border-radius:18px!important}
+.pgl-on .cal-grid{border-radius:24px;padding:8px 6px;margin:0 10px}
+.pgl-on .acard{border-radius:22px!important;margin:0 12px 8px;padding:14px 16px;border:0!important}
+.pgl-on .alist{display:flex;flex-direction:column;gap:0;background:transparent!important}
+.pgl-on .acard::before,.pgl-on .acard + .acard::before{display:none!important}
+.pgl-on .rit{border-radius:18px;margin:0 12px 8px;padding:12px 14px;border:0!important}
+.pgl-on .rit::before,.pgl-on .rit + .rit::before{display:none!important}
+.pgl-on .ml-list{display:flex;flex-direction:column;gap:8px;padding:0 12px;background:transparent!important}
+.pgl-on .ml-it{border-radius:20px;padding:12px 14px;border:0!important}
+.pgl-on .ml-it::before,.pgl-on .ml-it::after{display:none!important}
+.pgl-on .wx-card,.pgl-on .wx-note{border-radius:22px!important;box-shadow:none!important}
+.pgl-on .rec-panel{border-radius:28px 28px 0 0;box-shadow:none!important}
+.pgl-on .wh-s{border-radius:16px!important;box-shadow:none!important}
+.pgl-on .wh-news > a{border-radius:18px!important;box-shadow:none!important}
+.pgl-on .fv{border-radius:16px!important}
 </style>
 </head>
 <body>
@@ -4018,6 +4041,7 @@ function createWin(id) {
   L.wins.append(win);
   const ctx = makeCtx(id, win, body);
   try { APPS[id].create(ctx); } catch (e) { console.error(e); body.append(Empty('error', 'Cette application a rencontré un problème.')); }
+  if (!APPS[id].noGlass) try { PGL.install(win); } catch (e) { console.error(e); } /* every app in Liquid Glass (cards, rows, keys…) */
   win.addEventListener('pointerdown', () => { if (OS.mode === 'app' && OS.current === id) commitFront(); }, true);
   return (OS.wins[id] = { el: win, ctx, id });
 }
@@ -5523,11 +5547,22 @@ gl_FragColor=vec4(clamp(col,0.,1.)*aa,aa);}`;
   },
   light() { return D.documentElement.dataset.mode === 'light'; },
   hostOf(el) { return el.closest('.page, .tabpane'); },
+  /* colour of a tinted plate: --gt in the CSS ("r g b a"), or the element's own inline background (event / note colours) */
+  tintOf(el) {
+    const v = getComputedStyle(el).getPropertyValue('--gt').trim(); if (v) { const n = v.split(/[\s,]+/).map(Number); if (n.length >= 4 && n.every(x => !isNaN(x))) return n; }
+    const ib = el.style.backgroundColor || el.style.background;
+    if (ib) { try { const pr = h('i', { style: { display: 'none', color: ib } }); el.append(pr); const c = LGX.rgb(getComputedStyle(pr).color); pr.remove(); if (Math.max(...c) - Math.min(...c) > 20) return [c[0], c[1], c[2], .5]; } catch (e) { } } /* grey / white stays plain glass */
+    return null;
+  },
+  eligible(el) { return !el.closest(PGL.SKIP) && !(el.parentElement && el.parentElement.closest('.pgl')) && !!PGG.hostOf(el); }, /* no glass inside glass */
   add(host) { if (!host || PGG.hosts.has(host)) return; PGG.hosts.add(host); host.classList.add('pgg-host'); host._pggc = h('canvas', { class: 'pgg-c', 'aria-hidden': 'true', width: 0, height: 0 }); host.prepend(host._pggc); },
   kick(ms = 450, host) { if (host) PGG.focus = host; PGG.hot = Math.max(PGG.hot, performance.now() + ms); if (!PGG.raf) PGG.raf = requestAnimationFrame(PGG.frame); },
   frame() {
     PGG.raf = 0; if (!PGG.ok) return;
     const vis = []; for (const host of PGG.hosts) { if (!host.isConnected) { PGG.hosts.delete(host); continue; } if (host.offsetParent && !host.closest('.win.hidden')) vis.push(host); }
+    /* a page that re-rendered its content (replaceChildren) took our canvases with it: put them back */
+    if (PGG.owner && PGG.cv.parentNode !== PGG.owner) PGG.owner = null;
+    vis.forEach(hs => { if (hs._pggc.parentNode !== hs) { hs.prepend(hs._pggc); hs._pggk = ''; } });
     if (vis.length) {
       /* the page being scrolled / touched owns the live canvas; any other visible page gets a copy */
       const own = vis.includes(PGG.focus) ? PGG.focus : vis.includes(PGG.owner) ? PGG.owner : vis[vis.length - 1];
@@ -5547,7 +5582,8 @@ gl_FragColor=vec4(clamp(col,0.,1.)*aa,aa);}`;
       const x = (r.left - hr.left) / s, y = (r.top - hr.top) / s, ew = r.width / s, eh = r.height / s;
       if (y > hh + 30 || y + eh < -30 || x > w || x + ew < 0) continue;
       if (el._pggR == null) el._pggR = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 12;
-      list.push([x, y, ew, eh, Math.min(el._pggR, eh / 2, ew / 2), el.classList.contains('me')]); key += '|' + x.toFixed(1) + ',' + y.toFixed(1) + ',' + ew.toFixed(1) + ',' + eh.toFixed(1);
+      if (el._pggT === undefined) el._pggT = PGG.tintOf(el);
+      list.push([x, y, ew, eh, Math.min(el._pggR, eh / 2, ew / 2), el._pggT]); key += '|' + x.toFixed(1) + ',' + y.toFixed(1) + ',' + ew.toFixed(1) + ',' + eh.toFixed(1);
     }
     return { w, hh, hr, s, list, key };
   },
@@ -5566,15 +5602,15 @@ gl_FragColor=vec4(clamp(col,0.,1.)*aa,aa);}`;
     gl.blendFunc(gl.ZERO, gl.ONE_MINUS_SRC_ALPHA); gl.uniform1f(U.uMode, 1);
     for (const [x, y, ew, eh, R] of list) { gl.uniform4f(U.uRect, x, y, ew, eh); gl.uniform1f(U.uRad, R); gl.uniform4f(U.uQ, x - 18, y - 14, ew + 36, eh + 40); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); }
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); gl.uniform1f(U.uMode, 2);
-    for (const [x, y, ew, eh, R, me] of list) {
-      if (me !== blue) { blue = me; if (me) tint(lt ? PGL.BLUE_L : PGL.BLUE, PGL.BLUE_RC); else tint(T0, C0); } /* our own messages: glass with a blue tint and blue glints */
+    for (const [x, y, ew, eh, R, tn] of list) {
+      if (tn !== blue) { blue = tn; if (tn) tint(tn, [(tn[0] + 510) / 3, (tn[1] + 510) / 3, (tn[2] + 510) / 3]); else tint(T0, C0); } /* coloured glass (our messages, operators, events…): tinted plate with glints of the same colour */
       gl.uniform4f(U.uRect, x, y, ew, eh); gl.uniform1f(U.uRad, R); gl.uniform1f(U.uBez, Math.max(3, Math.min(LGX.cfg.bezel, R * .9, Math.min(ew, eh) * .4)));
       gl.uniform1f(U.uKk, -.5 * look.refr * (Math.min(ew, eh) < 70 ? .7 : 1)); gl.uniform4f(U.uQ, x - 1, y - 1, ew + 2, eh + 2); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
   },
   install(win) {
     win.classList.add('pgg-on');
-    const sweep = () => { $$(PGL.SEL, win).forEach(el => { if (!el.classList.contains('pgl')) el.classList.add('pgl'); PGG.add(PGG.hostOf(el)); }); PGG.kick(); };
+    const sweep = () => { $$(PGL.SEL, win).forEach(el => { if (el.classList.contains('pgl')) return; if (!PGG.eligible(el)) return; el.classList.add('pgl'); PGG.add(PGG.hostOf(el)); }); PGG.kick(); };
     const deb = debounce(sweep, 30);
     new MutationObserver(ms => { if (ms.some(m => m.type === 'childList')) deb(); else PGG.kick(); }).observe(win, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
     win.addEventListener('scroll', e => PGG.kick(250, e.target.closest && PGG.hostOf(e.target)), { capture: true, passive: true });
@@ -5585,7 +5621,8 @@ gl_FragColor=vec4(clamp(col,0.,1.)*aa,aa);}`;
 };
 const PGL = {
   T: 0, tile: null, url: '', src: null, io: null,
-  SEL: '.list > .li, .group > .li, .vmc, .dial-k .key, .pad:has(> .tf), .seg, .ct-ai, .bub.them, .bub.me, .cmp-box, .typing',
+  SEL: '.list > .li, .group > .li, .vmc, .dial-k .key, .pad:has(> .tf), .seg, .ct-ai, .bub.them, .bub.me, .cmp-box, .typing, .cx-k, .ncd, .evc, .cal-grid, .acard, .rit, .ml-it, .wx-card, .wx-note, .chip, .btn.filled, .btn.tonal, .rec-panel, .wh-s, .wh-news > a, .fv, .tm-keys > button, .ctl-main, .ctl-sec, .ne-it, .mus-now',
+  SKIP: '.sheet, .dlg, .menu, .lgx, .dark-scope, .fab, .toast, .scrim',
   BLUE: [0, 122, 255, .42], BLUE_L: [0, 122, 255, .78], BLUE_RC: [150, 200, 255],
   prep() {
     if (PGL.src && PGL.W === W) return;
@@ -5603,15 +5640,15 @@ const PGL = {
     const sweep = debounce(() => PGL.sweep(win), 50); new MutationObserver(sweep).observe(win, { childList: true, subtree: true }); PGL.sweep(win);
     win.addEventListener('scroll', e => { const sc = e.target; if (sc.classList && sc.classList.contains('scroll')) PGL.fit(sc); }, { capture: true, passive: true });
   },
-  scrollOf(el) { return el.closest('.scroll, .dial, .composer'); },
+  scrollOf(el) { return el.closest('.scroll, .dial, .composer, .page.cx'); },
   fit(sc) { /* backdrop layer = as many tiles as the content is tall */
     let bg = sc.querySelector(':scope > .pgl-bg'); if (!bg) { bg = h('div', { class: 'pgl-bg', 'aria-hidden': 'true' }); sc.prepend(bg); }
     const need = Math.max(1, Math.ceil(sc.scrollHeight / PGL.T)); if (bg.childElementCount !== need) { bg.replaceChildren(...Array.from({ length: need }, () => h('i', { style: { height: PGL.T + 'px', backgroundImage: `url("${PGL.url}")` } }))); }
   },
   sweep(win) {
-    $$('.scroll, .dial, .composer', win).forEach(sc => PGL.fit(sc));
+    $$('.scroll, .dial, .composer, .page.cx', win).forEach(sc => PGL.fit(sc));
     /* class + canvas are added here, in the same burst as the list rendering, so the bars' glass re-reads the page only once */
-    $$(PGL.SEL, win).forEach(el => { if (el._pgl) { if (el._pglOn) PGL.render(el); return; } el._pgl = true; el.classList.add('pgl'); el._pglc = h('canvas', { class: 'pgl-c', 'aria-hidden': 'true', width: 0, height: 0 }); el.prepend(el._pglc); PGL.io.observe(el); });
+    $$(PGL.SEL, win).forEach(el => { if (!el._pgl && !PGG.eligible(el)) return; if (el._pgl) { if (el._pglOn) PGL.render(el); return; } el._pgl = true; el.classList.add('pgl'); el._pglc = h('canvas', { class: 'pgl-c', 'aria-hidden': 'true', width: 0, height: 0 }); el.prepend(el._pglc); PGL.io.observe(el); });
   },
   q: new Set(), qRun: false,
   queue(el) { el._pglOn = true; PGL.q.add(el); if (PGL.qRun) return; PGL.qRun = true; requestAnimationFrame(PGL.drain); },
@@ -5626,7 +5663,7 @@ const PGL = {
     let c = el._pglc; if (!c) { c = el._pglc = h('canvas', { class: 'pgl-c', 'aria-hidden': 'true' }); el.prepend(c); }
     const cw = Math.round(w * dpr), ch = Math.round(hh * dpr); if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; }
     const x = c.getContext('2d'), out = x.createImageData(cw, ch), syo = ((oy % PGL.T) + PGL.T) % PGL.T + PGL.M;
-    LGX.plate(PGL.src, ox, syo, w, hh, dpr, LGX.plateLook(D.documentElement.dataset.mode !== 'light', { ...(el.classList.contains('me') ? { tint: D.documentElement.dataset.mode === 'light' ? PGL.BLUE_L : PGL.BLUE, rc: 200 } : {}), R, bezel: Math.min(LGX.cfg.bezel, R * .9, hh * .4), refr: LGX.cfg.refr * (Math.min(w, hh) < 70 ? .7 : 1) }), out); x.putImageData(out, 0, 0);
+    LGX.plate(PGL.src, ox, syo, w, hh, dpr, LGX.plateLook(D.documentElement.dataset.mode !== 'light', { ...((el._pggT === undefined ? (el._pggT = PGG.tintOf(el)) : el._pggT) ? { tint: el._pggT, rc: 220 } : {}), R, bezel: Math.min(LGX.cfg.bezel, R * .9, hh * .4), refr: LGX.cfg.refr * (Math.min(w, hh) < 70 ? .7 : 1) }), out); x.putImageData(out, 0, 0);
   },
 };
 /* ---------- Téléphone ---------- */
@@ -5640,7 +5677,7 @@ app('telephone', {
     const TABS = [{ id: 'messages', icon: 'chat', label: 'Messages' }, { id: 'recents', icon: 'schedule', label: 'Récents' }, { id: 'contacts', icon: 'person', label: 'Contacts' }, { id: 'pad', icon: 'dialpad', label: 'Clavier' }, { id: 'voicemail', icon: 'voicemail', label: 'Vocaux' }];
     const nav = GlassBar(TABS.filter(t => t.id !== 'pad'), tab, t => show(t), { side: TABS.find(t => t.id === 'pad'), source: () => { const p = host.querySelector('.tabpane:not(.off)'); return p && (p.firstElementChild || p); } });
     ctx.root(h('div', { class: 'page lg-page' }, host, nav));
-    PGL.install(ctx.win); ctx.onShow(() => { if (PGL.gpu) return PGG.kick(); if (PGL.W !== W) { PGL.prep(); $$('.pgl', ctx.win).forEach(el => { el._pglk = ''; if (el._pglOn) PGL.render(el); }); } });
+    ctx.onShow(() => { if (PGL.gpu) return PGG.kick(); if (!PGL.src) return; if (PGL.W !== W) { PGL.prep(); $$('.pgl', ctx.win).forEach(el => { el._pglk = ''; if (el._pglOn) PGL.render(el); }); } });
     let lastY = 0;
     ctx.onShow(() => nav.refresh());
     TABS.forEach(t => { panes[t.id] = h('div', { class: 'tabpane off' }); host.append(panes[t.id]); });
@@ -5683,7 +5720,12 @@ app('telephone', {
           h('div', { class: 'vma' }, Btn('Rappeler', () => startCall(m.number, m.contactId), { kind: 'tonal', icon: 'call' }), ct ? Btn('Message', () => openThreadWith(ct.id), { kind: 'text', icon: 'chat' }) : null, IconBtn('delete', () => { S.voicemails = S.voicemails.filter(x => x.id !== m.id); if (vmPlaying === m.id) { vmAudio.pause(); vmPlaying = null; } save('voicemail'); SND.play('trash'); render(); refreshBadges(); }, { label: 'Supprimer' }))); })) : Empty('voicemail', 'Aucun message vocal'));
       return v;
     };
-    const render = () => { if (tab === 'recents') panes.recents.replaceChildren(recents()); else if (tab === 'pad') panes.pad.replaceChildren(padView()); else if (tab === 'voicemail') panes.voicemail.replaceChildren(voicemail()); };
+    /* re-render the open tab and keep where it was scrolled (pressing play must not jump back to the top) */
+    const render = () => {
+      const p = panes[tab], old = p && p.querySelector('.scroll'), y = old ? old.scrollTop : 0;
+      if (tab === 'recents') p.replaceChildren(recents()); else if (tab === 'pad') p.replaceChildren(padView()); else if (tab === 'voicemail') p.replaceChildren(voicemail()); else return;
+      const nw = p.querySelector('.scroll'); if (nw && y) nw.scrollTop = y;
+    };
     ctx.onShow(() => { markSeen(); if (tab === 'recents' || tab === 'voicemail') render(); });
     ctx.onHide(() => { vmAudio.pause(); vmPlaying = null; });
     ctx.on('data', w => { if ((w === 'calls' && tab === 'recents') || (w === 'voicemail' && tab === 'voicemail')) render(); });
@@ -6102,7 +6144,7 @@ app('galerie', {
 });
 
 /* ---------- Appareil photo ---------- */
-app('camera', {
+app('camera', { noGlass: true,
   name: 'Appareil photo', icon: 'photo_camera', tone: 'sc', cat: 'Photo et musique', keys: 'photo camera selfie',
   create(ctx) {
     let stream = null, facing = 'environment', flash = false, busy = false;
@@ -6322,7 +6364,7 @@ const LAYERS = {
 };
 function distKm(a, b) { const R = 6371, dLa = (b.lat - a.lat) * Math.PI / 180, dLo = (b.lon - a.lon) * Math.PI / 180, s = Math.sin(dLa / 2) ** 2 + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLo / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(s)); }
 const fmtKm = k => k < 1 ? Math.round(k * 1000) + ' m' : k < 10 ? k.toFixed(1).replace('.', ',') + ' km' : Math.round(k) + ' km';
-app('plans', {
+app('plans', { noGlass: true,
   name: 'Plans', icon: 'map', tone: 't', cat: 'Web et cartes', keys: 'carte plan itineraire adresse openstreetmap',
   create(ctx) {
     const V = S.map; const TS = 256; const tilesMap = new Map(); let loads = 0, errs = 0, me = null, sel = null, raf = 0;
