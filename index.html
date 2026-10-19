@@ -1360,6 +1360,21 @@ input[type=date].tf,input[type=time].tf{padding-right:10px}
 #cc .ccg-bg{z-index:-3}
 #cc .shade-wall{z-index:-2}
 #cc .ccg-edge{z-index:-1}
+/* Browser: clear glass over real websites (their pixels can't be read) */
+.lgx-thru .lgx-pill{background:transparent;-webkit-backdrop-filter:saturate(1.7) brightness(1.04);backdrop-filter:saturate(1.7) brightness(1.04)}
+.lgx-thru .lgx-c{display:none}
+.lgx-thru .lgx-tint{background:rgba(36,36,42,.40)}
+:root[data-mode="light"] .lgx-thru .lgx-tint{background:rgba(236,236,240,.42)}
+/* Browser: compact address pill while reading */
+.br .lgdock{transition:width .42s cubic-bezier(.3,1.25,.45,1),height .42s cubic-bezier(.3,1.25,.45,1),bottom .42s cubic-bezier(.3,1.25,.45,1)}
+.br .lgdock.compact{width:52%;height:34px;bottom:calc(var(--sab) + 2px)}
+.br .lgdock .lgx-pill,.br .lgdock .lgx-tint{transition:border-radius .42s}
+.br .lgdock.compact .lgx-pill,.br .lgdock.compact .lgx-tint{border-radius:17px}
+.lgdock .br-bar>.ib{transition:opacity .2s,width .32s,min-width .32s,margin .32s}
+.lgdock.compact .br-bar>.ib{opacity:0;width:0;min-width:0;margin:0;padding:0;overflow:hidden;pointer-events:none}
+.lgdock .br-addr{transition:height .32s,font-size .32s,background .25s}
+.lgdock.compact .br-addr{height:34px;font-size:12.5px;background:none;box-shadow:none;padding:0 10px}
+.lgdock.compact .br-addr .ms{font-size:13px}
 </style>
 </head>
 <body>
@@ -2493,6 +2508,8 @@ function GlassDock(content, { source, side } = {}) {
     const dpr = Math.min(2, window.devicePixelRatio || 1), c = LGX.cfg, pw = Math.round(pill.clientWidth), ph = Math.round(pill.clientHeight); if (!pw || !ph) return;
     if (!srcPage || !srcPage.isConnected) { watch(); }
     if (imgV !== LGX.imgVer) { imgV = LGX.imgVer; dirty = true; }
+    /* a real website (cross-origin iframe) cannot be read: the glass becomes clear tinted glass over it */
+    const thru = !!(srcPage && srcPage.querySelector && srcPage.querySelector('iframe')); el.classList.toggle('lgx-thru', thru); if (thru) return;
     if (dirty && srcPage) { dirty = false; try { src = LGX.raster(srcPage, dpr); ver++; } catch (e) { src = null; } }
     if (!src) return;
     const k = pw + '|' + ph + '|' + dpr; if (fkey !== k) { fkey = k; f = LGX.field(pw, ph, c.bezel, dpr, .35); if (dot) fD = LGX.field(ph, ph, c.bezel, dpr, .35); ver++; }
@@ -5067,6 +5084,12 @@ app('navigateur', {
     const dock = GlassDock(bar, { source: () => view.firstElementChild });
     const pg = h('div', { class: 'page br' }, view, prog, dock); ctx.root(pg);
     ctx.onShow(() => dock.refresh());
+    /* Safari-style: scrolling down shrinks the bar to a small address pill; scrolling up (or touching the pill) brings it back */
+    const compact = on => { if (dock.classList.contains('compact') === on) return; dock.classList.toggle('compact', on); dock.refresh(); };
+    const watchScroll = sc => { let lastY = 0; sc.addEventListener('scroll', () => { const y = sc.scrollTop, d = y - lastY; if (y < 12) compact(false); else if (d > 6) compact(true); else if (d < -6) compact(false); if (Math.abs(d) > 6) lastY = y; }, { passive: true }); };
+    /* a real site lives in another origin: its scrolling can't be seen, so touching the page shrinks the bar */
+    window.addEventListener('blur', () => setTimeout(() => { const a = D.activeElement; if (a && a.tagName === 'IFRAME' && view.contains(a)) compact(true); }, 0));
+    const expand = () => { compact(false); const a = D.activeElement; if (a && a.tagName === 'IFRAME') try { a.blur(); window.focus(); } catch (e) { } };
     const isExt = u => /^https?:\/\//.test(u);
     const titleOf = u => { if (isExt(u)) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return u; } } const k = u.replace('harold://', '').split(/[/?]/)[0]; if (k === 'actus' && u.split('/')[3]) return ACTUS[+u.split('/')[3]].t; return (WEB[k] || WEB.accueil).t; };
     const go = (u, push = true) => { if (push) { stack = stack.slice(0, idx + 1); stack.push(u); idx = stack.length - 1; } B.last = u; if (!/accueil$/.test(u)) { B.history.unshift({ u, t: titleOf(u), at: now() }); B.history = B.history.slice(0, 60); } save('browser'); render(); };
@@ -5094,12 +5117,12 @@ app('navigateur', {
       if (isExt(u)) {
         const fr = h('iframe', { src: u, title: titleOf(u), referrerpolicy: 'no-referrer', allow: 'fullscreen' }); prog.classList.remove('hidden'); fr.addEventListener('load', () => prog.classList.add('hidden'));
         view.replaceChildren(h('div', { class: 'br-ext' }, h('div', { class: 'br-hint' }, I('info'), h('span', {}, 'Page vide ? Ce site refuse de s\'afficher dans Harold OS.'), h('a', { href: u, target: '_blank', rel: 'noopener' }, 'Ouvrir ↗')), fr));
-      } else { const k = u.replace('harold://', '').split(/[/?]/)[0]; const el = (pages[k] || pages.accueil)(u); view.replaceChildren(h('div', { class: 'scroll br-sc' }, el)); }
-      drawBar();
+      } else { const k = u.replace('harold://', '').split(/[/?]/)[0]; const el = (pages[k] || pages.accueil)(u), sc = h('div', { class: 'scroll br-sc' }, el); view.replaceChildren(sc); watchScroll(sc); }
+      compact(false); drawBar();
     };
     const drawBar = () => {
       const u = stack[idx], fav = B.bookmarks.some(b => b.u === u);
-      const addr = h('button', { class: 'br-addr', onclick: () => edit() }, I(isExt(u) ? 'lock' : 'home', 'f'), h('span', {}, titleOf(u)));
+      const addr = h('button', { class: 'br-addr', onclick: () => dock.classList.contains('compact') ? expand() : edit() }, I(isExt(u) ? 'lock' : 'home', 'f'), h('span', {}, titleOf(u)));
       bar.replaceChildren(IconBtn('arrow_back', () => { if (idx > 0) { idx--; B.last = stack[idx]; render(); } }, { label: 'Précédent', cls: idx > 0 ? '' : 'dim' }), IconBtn('arrow_forward', () => { if (idx < stack.length - 1) { idx++; B.last = stack[idx]; render(); } }, { label: 'Suivant', cls: idx < stack.length - 1 ? '' : 'dim' }), addr,
         IconBtn(fav ? 'star' : 'star_border', () => { if (fav) B.bookmarks = B.bookmarks.filter(b => b.u !== u); else B.bookmarks.push({ u, t: titleOf(u) }); save('browser'); drawBar(); ctx.toast(fav ? 'Retiré des favoris' : 'Ajouté aux favoris'); }, { label: 'Favori', fill: fav }), IconBtn('more_vert', () => more(), { label: 'Plus' }));
     };
