@@ -2075,7 +2075,7 @@ textarea.tf{padding:11px 14px}
 .pgl-on .acard{border-radius:22px!important;margin:0 12px 8px;padding:14px 16px;border:0!important}
 .pgl-on .alist{display:flex;flex-direction:column;gap:0;background:transparent!important}
 .pgl-on .acard::before,.pgl-on .acard + .acard::before{display:none!important}
-.pgl-on .rit{border-radius:18px;margin:0 12px 8px;padding:12px 14px;border:0!important}
+.pgl-on .rit{border-radius:18px!important;margin:0 0 8px!important;padding:12px 14px!important;border:0!important}
 .pgl-on .rit::before,.pgl-on .rit + .rit::before{display:none!important}
 .pgl-on .ml-list{display:flex;flex-direction:column;gap:8px;padding:0 12px;background:transparent!important}
 .pgl-on .ml-it{border-radius:20px;padding:12px 14px;border:0!important}
@@ -2085,6 +2085,15 @@ textarea.tf{padding:11px 14px}
 .pgl-on .wh-s{border-radius:16px!important;box-shadow:none!important}
 .pgl-on .wh-news > a{border-radius:18px!important;box-shadow:none!important}
 .pgl-on .fv{border-radius:16px!important}
+.pgl-on .rlist{background:transparent!important;box-shadow:none!important;overflow:visible!important;border-radius:0!important}
+.pgl-on .fab.pgl-f{background:transparent!important;isolation:isolate;color:var(--label)}
+.pgl-f > .pgl-c{position:absolute;left:0;top:0;width:100%;height:100%;border-radius:inherit;z-index:-1;pointer-events:none}
+.gt-img{position:absolute;inset:0;background:center/cover no-repeat;border-radius:inherit;pointer-events:none}
+.gt .ms{z-index:1}
+.pgl-on .gg{gap:8px;padding:0 12px}
+.pgl-on .gt{border-radius:18px!important}
+.pgl-on .gt .gt-img{inset:4px;border-radius:14px}
+.pgl-on .gt:active{opacity:1;transform:scale(.96)}
 </style>
 </head>
 <body>
@@ -3139,7 +3148,7 @@ const LGX = {
   rasterDoc(doc, y0, y1, dpr) {
     const win = doc.defaultView, sy = win.scrollY || doc.documentElement.scrollTop || 0, W = Math.max(1, doc.documentElement.clientWidth || win.innerWidth), H = Math.max(1, Math.round(y1 - y0));
     const cv = mkCanvas(Math.round(W * dpr), Math.round(H * dpr)), x = cv.getContext('2d'); x.scale(dpr, dpr);
-    let bgc = '#fff'; for (const e of [doc.body, doc.documentElement]) { if (!e) continue; const b = win.getComputedStyle(e).backgroundColor; if (b && b !== 'transparent' && !/,\s*0\)$/.test(b)) { bgc = b; break; } }
+    let bgc = '#fff'; for (const e of [doc.body, doc.documentElement]) { if (!e) continue; const b = win.getComputedStyle(e).backgroundColor; if (b && b !== 'transparent' && !/^rgba\(.*,\s*0\)$/.test(b)) { bgc = b; break; } /* rgb(0, 0, 0) is black, not transparent */ }
     x.fillStyle = bgc; x.fillRect(0, 0, W, H);
     const P = u => '/api/p?url=' + encodeURIComponent(u), rg = doc.createRange();
     const els = doc.body ? doc.body.getElementsByTagName('*') : [];
@@ -3149,7 +3158,7 @@ const LGX = {
       const cs = win.getComputedStyle(el); if (cs.visibility === 'hidden' || +cs.opacity === 0) continue;
       const b = { l: r.left, t: top - y0, w: r.width, h: r.height }; x.globalAlpha = +cs.opacity || 1;
       if (tg === 'IMG') { const s = el.currentSrc || el.src; if (s && /^https?:/.test(s)) { const im = LGX.img(P(s)); if (im) try { LGX.fit(x, im, im.naturalWidth, im.naturalHeight, b, cs.objectFit); } catch (e) { } } continue; }
-      const bg = cs.backgroundColor; if (bg && bg !== 'transparent' && !/,\s*0\)$/.test(bg)) { x.fillStyle = bg; x.beginPath(); const rr = Math.min(parseFloat(cs.borderTopLeftRadius) || 0, b.w / 2, b.h / 2); if (x.roundRect) x.roundRect(b.l, b.t, b.w, b.h, rr); else x.rect(b.l, b.t, b.w, b.h); x.fill(); }
+      const bg = cs.backgroundColor; if (bg && bg !== 'transparent' && !/^rgba\(.*,\s*0\)$/.test(bg)) { x.fillStyle = bg; x.beginPath(); const rr = Math.min(parseFloat(cs.borderTopLeftRadius) || 0, b.w / 2, b.h / 2); if (x.roundRect) x.roundRect(b.l, b.t, b.w, b.h, rr); else x.rect(b.l, b.t, b.w, b.h); x.fill(); }
       const bim = cs.backgroundImage; if (bim && bim !== 'none') { const mm = bim.match(/url\("?(.*?)"?\)/); if (mm && /^https?:/.test(mm[1])) { const im = LGX.img(P(mm[1])); if (im) try { LGX.fit(x, im, im.naturalWidth, im.naturalHeight, b, /contain/.test(cs.backgroundSize) ? 'contain' : 'cover'); } catch (e) { } } }
       for (const tn of el.childNodes) {
         if (tn.nodeType !== 3 || !tn.data.trim()) continue;
@@ -3167,7 +3176,7 @@ const LGX = {
     const Y0 = opt.y0 || 0; /* flat band start (can be above the page: content scrolled out of view) */
     const W = Math.round(pr.width / SC), H = opt.flat ? Math.round(Math.min(pr.height / SC + (opt.maxH ? 1e9 : 0), opt.maxH || 1e9)) : Math.min(4200, Math.max(Math.round(pr.height / SC), sc ? Math.round((sc.getBoundingClientRect().top - pr.top) / SC + sc.scrollHeight) : 0));
     const cv = mkCanvas(Math.round(W * dpr), Math.round(H * dpr)), x = cv.getContext('2d'); x.scale(dpr, dpr);
-    let bgc = 'rgb(20,22,20)'; for (let e = page; e; e = e.parentElement) { const b = getComputedStyle(e).backgroundColor; if (b && b !== 'transparent' && !/,\s*0\)$/.test(b)) { bgc = b; break; } }
+    let bgc = 'rgb(20,22,20)'; for (let e = page; e; e = e.parentElement) { const b = getComputedStyle(e).backgroundColor; if (b && b !== 'transparent' && !/^rgba\(.*,\s*0\)$/.test(b)) { bgc = b; break; } /* rgb(0, 0, 0) is black, not transparent */ }
     if (!opt.clear) { x.fillStyle = bgc; x.fillRect(0, 0, W, H); if (opt.under) try { opt.under(x, W, H); } catch (e) { } }
     const pos = r => { const inSc = sc && r._in; return { l: (r.left - pr.left) / SC, t: (r.top - pr.top) / SC + (inSc ? st : 0) - Y0, w: r.width / SC, h: r.height / SC }; };
     const rectOf = el => { const r = el.getBoundingClientRect(); r._in = sc && sc.contains(el); return pos(r); };
@@ -3308,7 +3317,7 @@ const TILT = {
 };
 function GlassBar(items, active, onchange, { source, side } = {}) {
   TILT.init();
-  const dark = () => D.documentElement.dataset.mode !== 'light';
+  let elRef = null; const dark = () => D.documentElement.dataset.mode !== 'light' || !!(elRef && elRef.closest('.dark-scope'));
   const tintC = () => dark() ? `rgba(40,40,46,${LGX.cfg.tint + .1})` : `rgba(214,214,220,${LGX.cfg.tint})`;
   const pc = h('canvas', { class: 'lgx-c', 'aria-hidden': 'true' }), dc = h('canvas', { class: 'lgx-c', 'aria-hidden': 'true' }), gc = h('canvas', { class: 'lgx-goo', 'aria-hidden': 'true' });
   const tabs = items.map((it, i) => h('button', { class: 'lgx-tab', type: 'button', 'data-id': it.id, 'aria-label': it.label, onclick: () => pick(it.id) }, h('span', { class: 'lgx-ico' }, I(it.icon)), h('span', { class: 'lgx-lb' }, it.label)));
@@ -3316,7 +3325,7 @@ function GlassBar(items, active, onchange, { source, side } = {}) {
   const sideBtn = side ? h('button', { class: 'lgx-tab lgx-sideb', type: 'button', 'aria-label': side.label, onclick: () => { if (side.action) { buzz(8); side.action(); } else pick(side.id); } }, h('span', { class: 'lgx-ico' }, I(side.icon))) : null;
   const dot = side ? h('div', { class: 'lgx-dot' }, dc, h('div', { class: 'lgx-tint' }), sideBtn) : null;
   const accP = h('i', { 'aria-hidden': 'true', style: 'position:absolute;width:0;height:0;overflow:hidden;color:var(--lgx-acc)' });
-  const el = h('nav', { class: 'lgbar lgx' + (side ? ' has-side' : ''), 'aria-label': 'Navigation' }, pill, dot, accP);
+  const el = h('nav', { class: 'lgbar lgx' + (side ? ' has-side' : ''), 'aria-label': 'Navigation' }, pill, dot, accP); elRef = el;
   if (!side) el.style.setProperty('--lgx-w', (items.length * 96 + 8) + 'px');
   let imgV = -1, cur = active, src = null, srcPage = null, ver = 1, dirty = true, pKey = '', gKey = '', bKey = '', Iv = 0, fP = null, fD = null, pOut = null, dOut = null, gOut = null, barC = null, barSrc = null, fkey = '', mo = null;
   /* drop physics */
@@ -3503,7 +3512,7 @@ function GlassDock(content, { source, side } = {}) {
     if (!src) return;
     const k = pw + '|' + ph + '|' + dpr; if (fkey !== k) { fkey = k; f = LGX.dims(pw, ph, dpr); if (dot) fD = LGX.dims(ph, ph, dpr); ver++; }
     const sc = LGX.scroller(srcPage), st = sc ? sc.scrollTop : 0, pgR = srcPage.getBoundingClientRect(), plR = pill.getBoundingClientRect();
-    const ox = (plR.left - pgR.left) / SC, oy = (plR.top - pgR.top) / SC + st, dark = D.documentElement.dataset.mode !== 'light';
+    const ox = (plR.left - pgR.left) / SC, oy = (plR.top - pgR.top) / SC + st, dark = D.documentElement.dataset.mode !== 'light' || !!el.closest('.dark-scope');
     const key = [st, ver, ox.toFixed(1), oy.toFixed(1), dark].join('|'); if (key === last) return; last = key;
     if (pc.width !== f.w || pc.height !== f.h) { pc.width = f.w; pc.height = f.h; out = null; } const x = pc.getContext('2d'); if (!out) out = x.createImageData(f.w, f.h);
     const dkm = dark, phh = ph; LGX.plate(src, ox, oy, pw, phh, dpr, LGX.plateLook(dkm, slim(phh)), out); x.putImageData(out, 0, 0);
@@ -3522,7 +3531,7 @@ function GlassDock(content, { source, side } = {}) {
     const frR = fr.getBoundingClientRect(), plR = pill.getBoundingClientRect(), ox = (plR.left - frR.left) / SC, oy = (plR.top - frR.top) / SC + sy - wsrc.y0;
     const key = ['w', sy, ver, ox.toFixed(1), oy.toFixed(1)].join('|'); if (key === last) return; last = key;
     if (pc.width !== f.w || pc.height !== f.h) { pc.width = f.w; pc.height = f.h; out = null; } const x = pc.getContext('2d'); if (!out) out = x.createImageData(f.w, f.h);
-    LGX.plate(wsrc, ox, oy, pw, ph, dpr, LGX.plateLook(D.documentElement.dataset.mode !== 'light', slim(ph)), out); x.putImageData(out, 0, 0);
+    LGX.plate(wsrc, ox, oy, pw, ph, dpr, LGX.plateLook(D.documentElement.dataset.mode !== 'light' || !!el.closest('.dark-scope'), slim(ph)), out); x.putImageData(out, 0, 0);
   };
   const loop = () => { if (!alive) return; try { frame(); } catch (e) { } requestAnimationFrame(loop); }; requestAnimationFrame(loop);
   new ResizeObserver(() => { dirty = true; }).observe(el);
@@ -5619,9 +5628,43 @@ gl_FragColor=vec4(clamp(col,0.,1.)*aa,aa);}`;
     sweep();
   },
 };
+/* FLT — floating round buttons (the "+" buttons) as glass drops over the fixed backdrop. They sit above the
+   content, so they get their own small plate, drawn again only when they move or change size. */
+const FLT = {
+  src: null, key: '', els: new Set(), raf: 0,
+  source(win) {
+    const w = Math.round(win.clientWidth || W), hh = Math.round(win.clientHeight || 844), lt = D.documentElement.dataset.mode === 'light', k = w + 'x' + hh + lt;
+    if (FLT.key === k && FLT.src) return FLT.src; FLT.key = k;
+    const d = Math.min(2, window.devicePixelRatio || 1), c = mkCanvas(Math.round(w * d), Math.round(hh * d)), x = c.getContext('2d'), wl = drawWall(lt ? 'clair' : 'anthracite', 260, lt ? 1 : 0, lt);
+    const sc = Math.max(c.width / wl.width, c.height / wl.height); x.drawImage(wl, (c.width - wl.width * sc) / 2, (c.height - wl.height * sc) / 2, wl.width * sc, wl.height * sc);
+    x.fillStyle = lt ? 'rgba(255,255,255,.28)' : 'rgba(24,24,27,.38)'; x.fillRect(0, 0, c.width, c.height);
+    FLT.src = { data: x.getImageData(0, 0, c.width, c.height).data, w: c.width, h: c.height, d, W: w, H: hh }; FLT.els.forEach(e => e._fk = ''); return FLT.src;
+  },
+  install(win) {
+    const sweep = () => { $$('.fab', win).forEach(el => { if (el._flt || el.closest('.sheet, .dlg, .menu, .dark-scope')) return; el._flt = true; el.classList.add('pgl-f'); el._fc = h('canvas', { class: 'pgl-c', 'aria-hidden': 'true', width: 0, height: 0 }); el.prepend(el._fc); FLT.els.add(el); }); FLT.kick(); };
+    new MutationObserver(debounce(sweep, 40)).observe(win, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+    addEventListener('resize', () => FLT.kick(600)); sweep();
+  },
+  hot: 0,
+  kick(ms = 500) { FLT.hot = Math.max(FLT.hot, performance.now() + ms); if (!FLT.raf) FLT.raf = requestAnimationFrame(FLT.frame); },
+  frame() {
+    FLT.raf = 0;
+    for (const el of FLT.els) { if (!el.isConnected) { FLT.els.delete(el); continue; } if (el.offsetParent && !el.closest('.win.hidden')) try { FLT.render(el); } catch (e) { } }
+    if (performance.now() < FLT.hot) FLT.raf = requestAnimationFrame(FLT.frame);
+  },
+  render(el) {
+    const win = el.closest('.win'); if (!win) return; const src = FLT.source(win);
+    const w = el.offsetWidth, hh = el.offsetHeight; if (w < 4 || hh < 4) return;
+    const r = el.getBoundingClientRect(), wr = win.getBoundingClientRect(), s = wr.width / (win.clientWidth || 1) || 1, x = (r.left - wr.left) / s, y = (r.top - wr.top) / s;
+    const dpr = Math.min(2, window.devicePixelRatio || 1), k = [w, hh, x.toFixed(1), y.toFixed(1), dpr, FLT.key].join('|'); if (k === el._fk) return; el._fk = k;
+    const c = el._fc; if (c.parentNode !== el) el.prepend(c); const cw = Math.round(w * dpr), ch = Math.round(hh * dpr); if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; }
+    const R = Math.min(parseFloat(getComputedStyle(el).borderTopLeftRadius) || hh / 2, hh / 2, w / 2), cx = c.getContext('2d'), out = cx.createImageData(cw, ch);
+    LGX.plate(src, x, y, w, hh, dpr, LGX.plateLook(D.documentElement.dataset.mode !== 'light', { R, bezel: Math.min(LGX.cfg.bezel, R * .9), refr: LGX.cfg.refr * .8 }), out); cx.putImageData(out, 0, 0);
+  },
+};
 const PGL = {
   T: 0, tile: null, url: '', src: null, io: null,
-  SEL: '.list > .li, .group > .li, .vmc, .dial-k .key, .pad:has(> .tf), .seg, .ct-ai, .bub.them, .bub.me, .cmp-box, .typing, .cx-k, .ncd, .evc, .cal-grid, .acard, .rit, .ml-it, .wx-card, .wx-note, .chip, .btn.filled, .btn.tonal, .rec-panel, .wh-s, .wh-news > a, .fv, .tm-keys > button, .ctl-main, .ctl-sec, .ne-it, .mus-now',
+  SEL: '.list > .li, .group > .li, .vmc, .dial-k .key, .pad:has(> .tf), .seg, .ct-ai, .bub.them, .bub.me, .cmp-box, .typing, .cx-k, .ncd, .evc, .cal-grid, .acard, .rit, .ml-it, .wx-card, .wx-note, .chip, .btn.filled, .btn.tonal, .rec-panel, .wh-s, .wh-news > a, .fv, .tm-keys > button, .ctl-main, .ctl-sec, .ne-it, .mus-now, .gg > .gt',
   SKIP: '.sheet, .dlg, .menu, .lgx, .dark-scope, .fab, .toast, .scrim',
   BLUE: [0, 122, 255, .42], BLUE_L: [0, 122, 255, .78], BLUE_RC: [150, 200, 255],
   prep() {
@@ -5633,7 +5676,7 @@ const PGL = {
     PGL.M = M; PGL.src = { data: y.getImageData(0, 0, sc.width, sc.height).data, w: sc.width, h: sc.height, d: 1, W: w, H: sc.height };
   },
   install(win) {
-    win.classList.add('pgl-on'); if (PGG.init()) { PGL.gpu = true; return PGG.install(win); }
+    win.classList.add('pgl-on'); try { FLT.install(win); } catch (e) { } if (PGG.init()) { PGL.gpu = true; return PGG.install(win); }
     PGL.prep();
     /* plates are drawn ahead of time (900 px before they scroll in) and a few per frame, so scrolling never stalls */
     if (!PGL.io) PGL.io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) PGL.queue(e.target); else { PGL.q.delete(e.target); PGL.free(e.target); } }), { rootMargin: '900px 0px' });
@@ -5917,7 +5960,7 @@ const REC = {
 };
 
 /* ---------- Shared bits ---------- */
-async function thumbInto(el, n) { const u = await fileURL(n); if (u) { el.style.backgroundImage = `url("${u}")`; el.classList.add('ld'); } }
+async function thumbInto(el, n) { const u = await fileURL(n); if (!u) return; if (el.classList.contains('gt')) { let i = el.querySelector(':scope > .gt-img'); if (!i) { i = h('i', { class: 'gt-img' }); el.prepend(i); } i.style.backgroundImage = `url("${u}")`; } else el.style.backgroundImage = `url("${u}")`; el.classList.add('ld'); } /* gallery: the photo sits inside its glass frame */
 function audioSheet(ctx, n) {
   const a = new Audio(); let raf; const t = h('div', { class: 'tn muted', style: 'display:flex;justify-content:space-between;font-size:13px;margin-top:4px' }, h('span', {}, '0:00'), h('span', {}, n.dur ? fmtDur(n.dur) : '–'));
   const sl = Slider(0, { min: 0, max: 1, label: 'Position', oninput: v => { if (a.duration) a.currentTime = v * a.duration; } });
