@@ -1997,6 +1997,14 @@ textarea.tf{padding:11px 14px}
 .mart{clip-path:none!important;border-radius:6px;background:var(--bg3)!important;color:var(--label2)!important}
 .mart .ms{width:50%;height:50%}
 .lhead > :not(.acts):not(h1){margin-left:16px;margin-right:16px}
+
+/* app icons on the home screen and in the dock: Liquid Glass plates (see iconGlass) */
+.ico.gl .bg{clip-path:none!important;background:transparent!important;color:#fff;isolation:isolate}
+.ico.gl .bg > .lgx-c{position:absolute;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none;filter:drop-shadow(0 4px 9px rgb(0 0 0 / .35))}
+.ico.gl .bg .ms{filter:drop-shadow(0 1px 2px rgb(0 0 0 / .45))}
+:root[data-mode="light"] .ico.gl .bg{color:#1C1C1E}
+:root[data-mode="light"] .ico.gl .bg .ms{filter:drop-shadow(0 1px 2px rgb(255 255 255 / .6))}
+:root[data-mode="light"] .ico.gl .bg > .lgx-c{filter:drop-shadow(0 4px 9px rgb(20 20 40 / .14))}
 </style>
 </head>
 <body>
@@ -3550,8 +3558,11 @@ function wallGlass(el, R, target = el, cookie = false) {
 }
 function homeGlass(tries = 0) {
   if (!GOV.wallImg() && /url\(/.test(L.wall.style.backgroundImage || '') && tries < 25) { setTimeout(() => homeGlass(tries + 1), 200); return; }
-  wallGlass($('#dock'), 34); $$('.wd', L.home).forEach(glassWidget);
+  wallGlass($('#dock'), 34); $$('.wd', L.home).forEach(glassWidget); $$('.hpage > .ico, #dock .ico', L.home).forEach(iconGlass);
 }
+/* App icons in Liquid Glass: each icon is a small glass plate (iOS rounded square) bending the wallpaper
+   behind it, with its white glyph on top. */
+function iconGlass(ico) { const sh = ico && $('.sh', ico), bg = sh && $('.bg', sh); if (!bg) return; ico.classList.add('gl'); wallGlass(sh, Math.round(sh.offsetWidth * .25), bg); }
 const dockGlass = () => homeGlass();
 function glassWidget(el) { if (el.classList.contains('wd-clock')) wallGlass(el, el.offsetWidth / 2, $('.shape', el), true); else wallGlass(el, 28); }
 /* Home screen: an invisible grid of 4 columns × 6 rows (the dock is apart). The top 2 rows hold the
@@ -3740,7 +3751,8 @@ function setupHome() {
   const moveMove = st => {
     if (st.ghost) { st.ghost.style.left = st.r0.x + st.dx + 'px'; st.ghost.style.top = st.r0.y + st.dy + 'px'; }
     else { const el = st.item; el.style.left = st.p0.x + st.dx + 'px'; el.style.top = st.p0.y + st.dy + 'px';
-      if (el.classList.contains('wd') && !st.gq) { st.gq = true; requestAnimationFrame(() => { st.gq = false; glassWidget(el); }); } }
+      if (!st.gq) { st.gq = true; requestAnimationFrame(() => { st.gq = false; if (el.classList.contains('wd')) glassWidget(el); else iconGlass(el); }); } }
+    if (st.ghost && !st.gq) { st.gq = true; requestAnimationFrame(() => { st.gq = false; iconGlass(st.ghost); }); }
     const isApp = st.item.classList.contains('ico'), d = $('#dock'); if (d) d.classList.toggle('droptarget', isApp && st.y > dockTop() - 10);
   };
   const moveEnd = st => {
