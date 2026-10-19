@@ -96,6 +96,9 @@
   --veil: rgb(245 245 246 / .82); --veil-2: rgb(245 245 246 / .78); --veil-3: rgb(241 241 242 / .55); --hbar: rgb(28 28 30 / .7);
   --primary: oklch(0.3 0 0); --on-primary: oklch(0.98 0 0); --primary-c: oklch(0.88 0 0); --on-primary-c: oklch(0.2 0 0);
 }
+/* Anthracite theme: black app icons with a light glyph (the whole look is black, not tinted) */
+:root[data-theme="anthracite"] .ico[class*="tone-"] .bg{background:linear-gradient(170deg, oklch(0.3 0 0) 0%, oklch(0.2 0 0) 38%, oklch(0.13 0 0) 100%);color:oklch(0.95 0 0)}
+:root[data-theme="anthracite"]:not([data-mode="light"]){--primary-c: oklch(0.24 0 0); --secondary-c: oklch(0.22 0 0); --tertiary-c: oklch(0.22 0 0); --on-secondary-c: oklch(0.93 0 0); --on-tertiary-c: oklch(0.93 0 0)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%}
 body{margin:0;background:var(--stage);color:var(--on-s);font-family:var(--font);overflow:hidden;
@@ -1793,11 +1796,11 @@ function drawWall(kind, hue, cm = 1, light = false) {
     };
     blob('squircle', .86, .14, .62, .35, .42, .27);
     blob('cookie9', .08, .31, .58, .2, .38, .24);
-    blob('circle', .72, .47, .34, 0, .62, .42, true);
+    blob('circle', .72, .47, .34, 0, cm > 0 ? .62 : .34, cm > 0 ? .42 : .2, cm > 0);
     blob('flower8', .22, .66, .66, .5, .37, .23);
     blob('clover4', .9, .8, .5, .7, .44, .28);
     blob('squircle', .3, .97, .7, -.25, .40, .25);
-    blob('circle', .55, .9, .16, 0, .7, .5, true);
+    blob('circle', .55, .9, .16, 0, cm > 0 ? .7 : .38, cm > 0 ? .5 : .22, cm > 0);
     /* fine concentric rings and a ribbon of thin lines: the refraction makes them ripple under glass */
     g.lineWidth = 3;
     for (let i = 0; i < 7; i++) { g.strokeStyle = N(.75, .10 - i * .011); g.beginPath(); g.arc(W * .72, H * .47, W * (.2 + i * .045), 0, 7); g.stroke(); }
