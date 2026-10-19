@@ -2023,6 +2023,7 @@ textarea.tf{padding:11px 14px}
 :root[data-wall="light"] #hbar{background:rgb(0 0 0 / .55)}
 :root[data-wall="light"] .screen:not([data-ctx="home"]):not([data-ctx="lock"]) #hbar{background:var(--hbar)}
 :root[data-wall="light"] #lock .lwall{filter:brightness(.97)}
+#home.edit .ico .rm{display:none!important}
 </style>
 </head>
 <body>
@@ -3694,7 +3695,7 @@ function homeLongPress(icoEl, st) {
   const items = [...(a.quick || []).map(q => ({ icon: q.icon, label: q.label, onclick: () => launch(id, q.link) })),
     loc === 'lib' ? (onHome ? { icon: 'remove_circle_outline', label: 'Retirer de l\'accueil', danger: true, onclick: () => removeFromHome(id) } : { icon: 'add_to_home_screen', label: 'Ajouter à l\'accueil', onclick: () => { addToHome(id); } })
       : { icon: 'apps', label: 'Modifier l\'écran d\'accueil', onclick: () => setEdit(true) },
-    loc !== 'lib' ? { icon: 'remove_circle_outline', label: 'Retirer de l\'accueil', danger: true, onclick: () => removeFromHome(id) } : null];
+    null]; /* no "remove from home": without search there would be no way to bring the app back */
   menu(L.sys, r.x, r.y + r.h + 10, items);
 }
 function addToHome(id) { const p = S.home.pages[0] = S.home.pages[0] || []; if (p.length >= HG.cols * (HG.rows - 2)) { toast(SCR, 'Plus de place sur l\'écran d\'accueil'); return; } p.push(id); save('home'); renderHome(); toast(SCR, APPS[id].name + ' ajoutée à l\'accueil'); }
@@ -3801,8 +3802,7 @@ function setupHome() {
       clearTimeout(st.lp);
       if (st.ready && st.item) { if (OPEN_LAYERS.length) closeTopLayer(); return moveStart(st); }
       if (st.long) return false;
-      if (Math.abs(st.dx) > Math.abs(st.dy) || OS.edit || st.dy < 0) return false; /* no app drawer: pull down = search */
-      st.mode = 'search';
+      return false; /* no search and no app drawer: every app lives on the home screen */
     },
     move(st) {
       if (st.mode === 'move') return moveMove(st);
