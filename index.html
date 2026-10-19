@@ -1424,6 +1424,17 @@ body.full .screen{bottom:calc(env(safe-area-inset-bottom, 0px) + 30px);border-ra
 .hpage.free>.moving{transform:scale(1.08);z-index:6;transition:none;filter:drop-shadow(0 16px 24px rgba(0,0,0,.35))}
 #dock .ico.lifted{transform:scale(1.08);transition:transform .25s cubic-bezier(.3,1.6,.5,1)}
 #dock.droptarget{outline:2px solid color-mix(in srgb, var(--primary) 70%, transparent);outline-offset:3px}
+/* glass plates are rendered in the canvas (tint, bevel, rim): no CSS tint/rim layer on top */
+.lgx:not(.lgx-thru) .lgx-pill>.lgx-tint,.lgx:not(.lgx-thru) .lgx-dot>.lgx-tint{background:transparent;box-shadow:none}
+.lgx .lgx-pill,.lgx .lgx-dot{background:transparent}
+#dock .dock-tint,.wd .dock-tint{display:none}
+#dock.lgx-home,.wd.lgx-home{box-shadow:none;overflow:visible}
+#dock.lgx-home>.lgx-c,.wd.lgx-home:not(.wd-clock)>.lgx-c{filter:drop-shadow(0 8px 18px rgba(0,0,0,.28))}
+.wd-clock.lgx-home .shape{clip-path:none;background:none;animation:none}
+.wd-clock.lgx-home .shape>.lgx-c{inset:0;width:100%;height:100%;clip-path:none;filter:drop-shadow(0 8px 18px rgba(0,0,0,.28))}
+.lgov .lgg::after{box-shadow:none}
+:root[data-mode="light"] .wd-clock.lgx-home .shape,:root:not([data-mode="light"]) .wd-clock.lgx-home .shape{background:none}
+:root #dock.lgx-home,:root .wd.lgx-home,:root[data-mode="light"] #dock.lgx-home,:root[data-mode="light"] .wd.lgx-home{box-shadow:none}
 </style>
 </head>
 <body>
@@ -2238,6 +2249,42 @@ const LGX = {
   imgVer: 0, imgs: new Map(),
   img(u) { let im = LGX.imgs.get(u); if (!im) { im = new Image(); if (/^\/api\/p\?/.test(u)) im.crossOrigin = 'anonymous'; im.onload = () => { LGX.imgVer++; }; im.src = u; LGX.imgs.set(u, im); if (LGX.imgs.size > 40) LGX.imgs.delete(LGX.imgs.keys().next().value); } return im.complete && im.naturalWidth ? im : null; },
   fit(x, src, sw, sh, b, mode) { if (!sw || !sh) return; let w = b.w, hh = b.h; if (mode === 'contain' || mode === 'cover') { const k = mode === 'contain' ? Math.min(b.w / sw, b.h / sh) : Math.max(b.w / sw, b.h / sh); w = sw * k; hh = sh * k; } x.save(); x.beginPath(); x.rect(b.l, b.t, b.w, b.h); x.clip(); x.drawImage(src, b.l + (b.w - w) / 2, b.t + (b.h - hh) / 2, w, hh); x.restore(); },
+  /* A glass plate, rendered like the tab-bar drop: a shape (rounded rectangle, or the "cookie" of
+     the clock) whose thick edge bends what is behind it (refraction + a touch of chromatic
+     dispersion), lightly tinted, with a bevel lit from the top-left and a thin specular rim.
+     The shape is in the alpha channel, so no clip/CSS tint is needed.
+     src: raster {data,w,h,d}; (ox, oy): plate top-left in src coordinates; w×h plate size in CSS px. */
+  plate(src, ox, oy, w, h, dpr, P, out) {
+    const o = out.data, W2 = out.width, H2 = out.height, s = src.data, sw = src.w, sh = src.h, sd = src.d;
+    const cx = w / 2, cy = h / 2, R = Math.min(P.R == null ? Math.min(w, h) / 2 : P.R, w / 2, h / 2), bez = Math.max(4, Math.min(P.bezel || 22, R * .95, Math.min(w, h) * .45));
+    const kk = -.5 * (P.refr == null ? 70 : P.refr), mag = P.mag || 1, ds = P.disp == null ? .03 : P.disp, tint = P.tint || [40, 40, 46, .16], tr = tint[0], tg = tint[1], tb = tint[2], ta = tint[3];
+    const lx = P.lx == null ? -.5 : P.lx, ly = P.ly == null ? -.85 : P.ly, rim = P.rim == null ? .5 : P.rim, rc = P.rc == null ? 235 : P.rc, bev = P.bevel == null ? .16 : P.bevel;
+    const ck = !!P.cookie, R0 = Math.min(w, h) / 2, hx = w / 2 - R, hy = h / 2 - R, mX = sw - 1, mY = sh - 1;
+    const sdf = ck ? (x, y) => { const dx = x - cx, dy = y - cy, a = Math.atan2(dy, dx); return (Math.sqrt(dx * dx + dy * dy) - R0 * (1 + .065 * Math.cos(9 * (a + Math.PI / 2))) / 1.065) * .93; }
+      : (x, y) => { const qx = Math.abs(x - cx) - hx, qy = Math.abs(y - cy) - hy; return Math.min(Math.max(qx, qy), 0) + Math.sqrt(Math.max(qx, 0) ** 2 + Math.max(qy, 0) ** 2) - R; };
+    const smp = (X, Y, c) => { X = (X * sd) | 0; Y = (Y * sd) | 0; X = X < 0 ? 0 : X > mX ? mX : X; Y = Y < 0 ? 0 : Y > mY ? mY : Y; return s[(Y * sw + X) * 4 + c]; };
+    let p = 0;
+    for (let j = 0; j < H2; j++) {
+      const y = (j + .5) / dpr;
+      for (let i = 0; i < W2; i++, p += 4) {
+        const x = (i + .5) / dpr, d = sdf(x, y), aa = .5 - d * dpr; if (aa <= 0) { o[p + 3] = 0; continue; }
+        const depth = -d; let r, g, b;
+        const bx = ox + cx + (x - cx) / mag, by = oy + cy + (y - cy) / mag;
+        if (depth < bez) {
+          let nx = sdf(x + .5, y) - d, ny = sdf(x, y + .5) - d; const gl = Math.sqrt(nx * nx + ny * ny) || 1; nx /= gl; ny /= gl;
+          const m = depth <= 0 ? 1 : Math.pow(1 - depth / bez, 2.4), dx = nx * m * kk, dy = ny * m * kk;
+          r = smp(bx + dx * (1 - ds), by + dy * (1 - ds), 0); g = smp(bx + dx, by + dy, 1); b = smp(bx + dx * (1 + ds), by + dy * (1 + ds), 2);
+          r = r * (1 - ta) + tr * ta; g = g * (1 - ta) + tg * ta; b = b * (1 - ta) + tb * ta;
+          const lit = -(nx * lx + ny * ly), sh2 = m * bev * lit * 255; r += sh2; g += sh2; b += sh2;
+          const ra = Math.max(0, 1 - depth / 1.5) * rim * (.3 + .7 * Math.max(0, lit)); if (ra > 0) { r = r * (1 - ra) + rc * ra; g = g * (1 - ra) + rc * ra; b = b * (1 - ra) + rc * ra; }
+        } else { r = smp(bx, by, 0) * (1 - ta) + tr * ta; g = smp(bx, by, 1) * (1 - ta) + tg * ta; b = smp(bx, by, 2) * (1 - ta) + tb * ta; }
+        o[p] = r; o[p + 1] = g; o[p + 2] = b; o[p + 3] = (aa > 1 ? 1 : aa) * 255;
+      }
+    }
+  },
+  /* plate look for the current theme */
+  plateLook(dark, extra) { return Object.assign(dark ? { tint: [40, 40, 46, .16], rim: .5, rc: 230, bevel: .14 } : { tint: [240, 240, 244, .16], rim: .9, rc: 255, bevel: .18 }, { refr: LGX.cfg.refr, bezel: LGX.cfg.bezel, disp: .03 }, extra || {}); },
+  rgb(css) { const c = LGX._rgbc || (LGX._rgbc = mkCanvas(1, 1)), x = c.getContext('2d', { willReadFrequently: true }); x.clearRect(0, 0, 1, 1); x.fillStyle = css; x.fillRect(0, 0, 1, 1); const d = x.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2]]; },
   /* Rasterise a band [y0, y1] (document coordinates) of a same-origin web page shown in an iframe
      (websites opened through the Vercel proxy): backgrounds, images (re-fetched through the proxy so
      the canvas stays readable) and text. Only elements crossing the band are measured. */
@@ -2476,7 +2523,7 @@ function GlassBar(items, active, onchange, { source, side } = {}) {
   pill.addEventListener('contextmenu', e => e.preventDefault());
   const drawBar = (bctx, dpr) => {
     const pr = pill.getBoundingClientRect(), pw = pr.width / SC, ink = getComputedStyle(el).getPropertyValue('--lgx-ink').trim() || '#F5F5F7', acc = getComputedStyle(accP).color || '#0A6CFF';
-    bctx.setTransform(1, 0, 0, 1, 0, 0); bctx.drawImage(pc, 0, 0); bctx.setTransform(dpr, 0, 0, dpr, 0, 0); bctx.fillStyle = tintC(); bctx.fillRect(0, 0, pw, 64);
+    bctx.setTransform(1, 0, 0, 1, 0, 0); bctx.drawImage(pc, 0, 0); bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     tabs.forEach((t, k) => {
       const on = held ? k === hoverI : items[k].id === cur, col = on ? acc : ink, svg = $('svg', t), sp = $('.lgx-lb', t);
       bctx.shadowColor = dark() ? 'rgba(0,0,0,.75)' : 'rgba(242,242,246,.95)'; bctx.shadowBlur = 6 * dpr;
@@ -2532,9 +2579,9 @@ function GlassBar(items, active, onchange, { source, side } = {}) {
     if (pk !== pKey) {
       pKey = pk;
       if (pc.width !== fP.w || pc.height !== fP.h) { pc.width = fP.w; pc.height = fP.h; pOut = null; } const pctx = pc.getContext('2d'); if (!pOut) pOut = pctx.createImageData(fP.w, fP.h);
-      LGX.lens(fP, src, ox, oy, c.refr, c.disp, 1, 1, pOut); pctx.putImageData(pOut, 0, 0);
+      LGX.plate(src, ox, oy, pw, 64, dpr, LGX.plateLook(dk, { R: 32 }), pOut); pctx.putImageData(pOut, 0, 0);
       if (dot) { const dR = dot.getBoundingClientRect(), dx = (dR.left - pgR.left) / SC, dy = (dR.top - pgR.top) / SC + st;
-        if (dc.width !== fD.w) { dc.width = fD.w; dc.height = fD.h; dOut = null; } const dctx = dc.getContext('2d'); if (!dOut) dOut = dctx.createImageData(fD.w, fD.h); LGX.lens(fD, src, dx, dy, c.refr, c.disp, 1, 1, dOut); dctx.putImageData(dOut, 0, 0); }
+        if (dc.width !== fD.w) { dc.width = fD.w; dc.height = fD.h; dOut = null; } const dctx = dc.getContext('2d'); if (!dOut) dOut = dctx.createImageData(fD.w, fD.h); LGX.plate(src, dx, dy, 64, 64, dpr, LGX.plateLook(dk, { R: 32 }), dOut); dctx.putImageData(dOut, 0, 0); }
     }
     if (xB == null) return;
     const av = Math.abs(vB), sx = 1 + sd, sy = 1 - sd * .55;
@@ -2562,7 +2609,7 @@ function GlassBar(items, active, onchange, { source, side } = {}) {
   let alive = true; const loop = () => { if (!alive) return; try { frame(); } catch (e) { } requestAnimationFrame(loop); }; requestAnimationFrame(loop);
   new ResizeObserver(() => { paint(); dirty = true; xB = null; }).observe(el);
   try { D.fonts && D.fonts.ready.then(() => { dirty = true; }); } catch (e) { } setTimeout(() => dirty = true, 600); setTimeout(() => dirty = true, 1600);
-  bus.on('settings', () => { dirty = true; pKey = ''; gKey = ''; bKey = ''; });
+  bus.on('settings', () => { const re = () => { dirty = true; pKey = ''; gKey = ''; bKey = ''; }; re(); setTimeout(re, 350); setTimeout(re, 900); });
   el.set = id => goTo(id, false);
   /* the round button can change with the tab (e.g. Clavier / Nouveau message / Nouveau contact) */
   el.setSide = s => { if (!sideBtn || !s || (s.id === side.id && s.icon === side.icon)) return; side = s; sideBtn.setAttribute('aria-label', s.label); const ic = $('.lgx-ico', sideBtn);
@@ -2601,8 +2648,8 @@ function GlassDock(content, { source, side } = {}) {
     const ox = (plR.left - pgR.left) / SC, oy = (plR.top - pgR.top) / SC + st, dark = D.documentElement.dataset.mode !== 'light';
     const key = [st, ver, ox.toFixed(1), oy.toFixed(1), dark].join('|'); if (key === last) return; last = key;
     if (pc.width !== f.w || pc.height !== f.h) { pc.width = f.w; pc.height = f.h; out = null; } const x = pc.getContext('2d'); if (!out) out = x.createImageData(f.w, f.h);
-    LGX.lens(f, src, ox, oy, c.refr, c.disp, 1, 1, out); x.putImageData(out, 0, 0);
-    if (dot && fD) { const dR = dot.getBoundingClientRect(), dx = (dR.left - pgR.left) / SC, dy = (dR.top - pgR.top) / SC + st; if (dc.width !== fD.w) { dc.width = fD.w; dc.height = fD.h; dOut = null; } const dctx = dc.getContext('2d'); if (!dOut) dOut = dctx.createImageData(fD.w, fD.h); LGX.lens(fD, src, dx, dy, c.refr, c.disp, 1, 1, dOut); dctx.putImageData(dOut, 0, 0); }
+    const dkm = dark, phh = ph; LGX.plate(src, ox, oy, pw, phh, dpr, LGX.plateLook(dkm, { R: phh / 2 }), out); x.putImageData(out, 0, 0);
+    if (dot && fD) { const dR = dot.getBoundingClientRect(), dx = (dR.left - pgR.left) / SC, dy = (dR.top - pgR.top) / SC + st; if (dc.width !== fD.w) { dc.width = fD.w; dc.height = fD.h; dOut = null; } const dctx = dc.getContext('2d'); if (!dOut) dOut = dctx.createImageData(fD.w, fD.h); LGX.plate(src, dx, dy, ph, ph, dpr, LGX.plateLook(dark, { R: ph / 2 }), dOut); dctx.putImageData(dOut, 0, 0); }
   };
   /* proxied website: raster a band around the visible part, re-raster when scrolling leaves it */
   let wsrc = null, wdoc = null, wmo = null, wdirty = true, wT = 0;
@@ -2617,12 +2664,12 @@ function GlassDock(content, { source, side } = {}) {
     const frR = fr.getBoundingClientRect(), plR = pill.getBoundingClientRect(), ox = (plR.left - frR.left) / SC, oy = (plR.top - frR.top) / SC + sy - wsrc.y0;
     const key = ['w', sy, ver, ox.toFixed(1), oy.toFixed(1)].join('|'); if (key === last) return; last = key;
     if (pc.width !== f.w || pc.height !== f.h) { pc.width = f.w; pc.height = f.h; out = null; } const x = pc.getContext('2d'); if (!out) out = x.createImageData(f.w, f.h);
-    LGX.lens(f, wsrc, ox, oy, c.refr, c.disp, 1, 1, out); x.putImageData(out, 0, 0);
+    LGX.plate(wsrc, ox, oy, pw, ph, dpr, LGX.plateLook(D.documentElement.dataset.mode !== 'light', { R: ph / 2 }), out); x.putImageData(out, 0, 0);
   };
   const loop = () => { if (!alive) return; try { frame(); } catch (e) { } requestAnimationFrame(loop); }; requestAnimationFrame(loop);
   new ResizeObserver(() => { dirty = true; }).observe(el);
   try { D.fonts && D.fonts.ready.then(() => { dirty = true; }); } catch (e) { } setTimeout(() => dirty = true, 600);
-  bus.on('settings', () => { dirty = true; last = ''; });
+  bus.on('settings', () => { const re = () => { dirty = true; last = ''; wdirty = true; }; re(); setTimeout(re, 350); setTimeout(re, 900); });
   el.refresh = () => { dirty = true; last = ''; setTimeout(watch, 40); };
   el.destroy = () => { alive = false; };
   return el;
@@ -2823,14 +2870,14 @@ function wallSrc() {
   WG.key = key; WG.src = { data: x.getImageData(0, 0, cv.width, cv.height).data, w: cv.width, h: cv.height, d: dpr, W: Wd, H: Hd };
   return WG.src;
 }
-function wallGlass(el, R, target = el) {
+function wallGlass(el, R, target = el, cookie = false) {
   if (!el || !el.isConnected) return;
   const src = wallSrc(), sr = SCR.getBoundingClientRect(), dr = el.getBoundingClientRect(), dw = Math.round(el.offsetWidth), dh = Math.round(el.offsetHeight); if (!dw || !dh) return;
-  const fk = [dw, dh, R, src.d].join('|'); let f = WG.fields.get(fk); if (!f) { f = LGX.field(dw, dh, LGX.cfg.bezel, src.d, .35, R); WG.fields.set(fk, f); if (WG.fields.size > 12) WG.fields.delete(WG.fields.keys().next().value); }
-  const c = target.querySelector(':scope > .lgx-c') || h('canvas', { class: 'lgx-c', 'aria-hidden': 'true' });
-  c.width = f.w; c.height = f.h; const cx = c.getContext('2d'), out = cx.createImageData(f.w, f.h);
-  LGX.lens(f, src, (dr.left - sr.left) / SC, (dr.top - sr.top) / SC, LGX.cfg.refr, LGX.cfg.disp, 1, 1, out); cx.putImageData(out, 0, 0);
-  if (c.parentNode !== target) target.prepend(c, h('div', { class: 'dock-tint', 'aria-hidden': 'true' }));
+  const c = target.querySelector(':scope > .lgx-c') || h('canvas', { class: 'lgx-c', 'aria-hidden': 'true' }), d = src.d, cw = Math.round(dw * d), ch = Math.round(dh * d);
+  if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; }
+  const cx = c.getContext('2d'), out = cx.createImageData(cw, ch), sc = dr.width / SC / dw;
+  LGX.plate(src, (dr.left - sr.left) / SC, (dr.top - sr.top) / SC, dw, dh, d, LGX.plateLook(D.documentElement.dataset.mode !== 'light', { R, cookie, mag: 1 / sc }), out); cx.putImageData(out, 0, 0);
+  if (c.parentNode !== target) target.prepend(c);
   el.classList.add('lgx-home');
 }
 function homeGlass(tries = 0) {
@@ -2838,7 +2885,7 @@ function homeGlass(tries = 0) {
   wallGlass($('#dock'), 34); $$('.wd', L.home).forEach(glassWidget);
 }
 const dockGlass = () => homeGlass();
-function glassWidget(el) { if (el.classList.contains('wd-clock')) wallGlass(el, el.offsetWidth / 2, $('.shape', el)); else wallGlass(el, 28); }
+function glassWidget(el) { if (el.classList.contains('wd-clock')) wallGlass(el, el.offsetWidth / 2, $('.shape', el), true); else wallGlass(el, 28); }
 /* Home screen: widgets and app icons are placed freely (long press, then drag them anywhere).
    Positions live in S.home.free (CSS px inside the page). The first time, the old grid is laid
    out once, measured, and turned into free positions. */
@@ -3554,9 +3601,14 @@ const GOV = {
       if (cv.width !== f.w || cv.height !== f.h) { cv.width = f.w; cv.height = f.h; }
       const x = cv.getContext('2d'), out = x.createImageData(f.w, f.h), cx = w / 2, cy = hh / 2;
       const rl = (r.left - s.rect.left) / SC, rt = (r.top - s.rect.top) / SC;
+      if (on && !prim) prim = GOV.color('var(--primary)');
+      if (!ex && !el.classList.contains('ncard')) { /* glass plate like the drop: bent edge, bevel, specular rim; tinted with the theme colour when on */
+        const pr2 = on ? LGX.rgb(prim) : null, look = LGX.plateLook(dark, { R, refr: cfg.refr * (Math.min(w, hh) < 80 ? .75 : 1), mag: 1 / sc, bezel: Math.min(cfg.bezel, R * .9) });
+        if (on) look.tint = [pr2[0], pr2[1], pr2[2], dark ? .5 : .55];
+        LGX.plate(s, rl + cx * sc - cx, rt + cy * sc - cy, w, hh, dpr, look, out); x.putImageData(out, 0, 0); return;
+      }
       LGX.lens(f, s, rl + cx * sc - cx, rt + cy * sc - cy, cfg.refr * sc * (Math.min(w, hh) < 80 ? .75 : 1), 0, 1 / sc, 1.15, out);
       x.putImageData(out, 0, 0);
-      if (on && !prim) prim = GOV.color('var(--primary)');
       /* clear glass: light tint (cards/banners keep more for reading) */ x.globalAlpha = on ? (dark ? .5 : .55) : 1; const card = el.classList.contains('ncard'), ta = el.dataset.tint ? +el.dataset.tint : card ? .64 : .16; x.fillStyle = on ? prim : dark ? `rgba(40,40,46,${ta})` : `rgba(250,250,252,${ta - .02})`; x.fillRect(0, 0, f.w, f.h); x.globalAlpha = 1;
       if (jt) { x.fillStyle = dark ? 'rgba(255,255,255,.12)' : 'rgba(0,0,0,.09)'; x.fillRect(Math.round(16 * dpr), 0, f.w - Math.round(32 * dpr), Math.max(1, Math.round(dpr * .75))); }
     });
