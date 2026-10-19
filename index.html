@@ -2302,32 +2302,57 @@ const LGX = {
      The shape is in the alpha channel, so no clip/CSS tint is needed.
      src: raster {data,w,h,d}; (ox, oy): plate top-left in src coordinates; w×h plate size in CSS px. */
   plate(src, ox, oy, w, h, dpr, P, out) {
+    /* The shape of the plate (edge, refraction offsets, bevel light, rim) only depends on its size and
+       look: it is computed once and cached, so each frame only samples the background (fast enough to
+       follow scrolling on a phone). */
     const o = out.data, W2 = out.width, H2 = out.height, s = src.data, sw = src.w, sh = src.h, sd = src.d;
-    const cx = w / 2, cy = h / 2, R = Math.min(P.R == null ? Math.min(w, h) / 2 : P.R, w / 2, h / 2), bez = Math.max(4, Math.min(P.bezel || 22, R * .95, Math.min(w, h) * .45));
-    const kk = -.5 * (P.refr == null ? 70 : P.refr), mag = P.mag || 1, ds = P.disp == null ? .03 : P.disp, tint = P.tint || [40, 40, 46, .16], tr = tint[0], tg = tint[1], tb = tint[2], ta = tint[3];
-    const lx = P.lx == null ? -.5 : P.lx, ly = P.ly == null ? -.85 : P.ly, rim = P.rim == null ? .5 : P.rim, rc = P.rc == null ? 235 : P.rc, bev = P.bevel == null ? .16 : P.bevel;
-    const ck = !!P.cookie, R0 = Math.min(w, h) / 2, hx = w / 2 - R, hy = h / 2 - R, mX = sw - 1, mY = sh - 1;
+    const tint = P.tint || [40, 40, 46, .16], tr = tint[0], tg = tint[1], tb = tint[2], ta = tint[3], ia = 1 - ta, rc = P.rc == null ? 235 : P.rc;
+    const G = LGX.plateGeo(W2, H2, w, h, dpr, P), A = G.A, K = G.K, F = G.F, mX = sw - 1, mY = sh - 1;
+    let p = 0;
+    for (let i = 0, n = W2 * H2; i < n; i++, p += 4) {
+      const al = A[i]; if (!al) { o[p + 3] = 0; continue; }
+      const f = i * 8; let X, Y, r, g, b;
+      if (K[i] === 1) {
+        X = ((ox + F[f]) * sd) | 0; Y = ((oy + F[f + 1]) * sd) | 0; X = X < 0 ? 0 : X > mX ? mX : X; Y = Y < 0 ? 0 : Y > mY ? mY : Y; const q = (Y * sw + X) * 4;
+        r = s[q] * ia + tr * ta; g = s[q + 1] * ia + tg * ta; b = s[q + 2] * ia + tb * ta;
+      } else {
+        X = ((ox + F[f]) * sd) | 0; Y = ((oy + F[f + 1]) * sd) | 0; X = X < 0 ? 0 : X > mX ? mX : X; Y = Y < 0 ? 0 : Y > mY ? mY : Y; r = s[(Y * sw + X) * 4];
+        X = ((ox + F[f + 2]) * sd) | 0; Y = ((oy + F[f + 3]) * sd) | 0; X = X < 0 ? 0 : X > mX ? mX : X; Y = Y < 0 ? 0 : Y > mY ? mY : Y; g = s[(Y * sw + X) * 4 + 1];
+        X = ((ox + F[f + 4]) * sd) | 0; Y = ((oy + F[f + 5]) * sd) | 0; X = X < 0 ? 0 : X > mX ? mX : X; Y = Y < 0 ? 0 : Y > mY ? mY : Y; b = s[(Y * sw + X) * 4 + 2];
+        const ad = F[f + 6], ra = F[f + 7];
+        r = r * ia + tr * ta + ad; g = g * ia + tg * ta + ad; b = b * ia + tb * ta + ad;
+        if (ra > 0) { const ir = 1 - ra; r = r * ir + rc * ra; g = g * ir + rc * ra; b = b * ir + rc * ra; }
+      }
+      o[p] = r; o[p + 1] = g; o[p + 2] = b; o[p + 3] = al;
+    }
+  },
+  geos: new Map(),
+  plateGeo(W2, H2, w, h, dpr, P) {
+    const R = Math.min(P.R == null ? Math.min(w, h) / 2 : P.R, w / 2, h / 2), bez = Math.max(4, Math.min(P.bezel || 22, R * .95, Math.min(w, h) * .45));
+    const kk = -.5 * (P.refr == null ? 70 : P.refr), mag = P.mag || 1, ds = P.disp == null ? .03 : P.disp;
+    const lx = P.lx == null ? -.5 : P.lx, ly = P.ly == null ? -.85 : P.ly, rim = P.rim == null ? .5 : P.rim, bev = P.bevel == null ? .16 : P.bevel, ck = !!P.cookie;
+    const key = [W2, H2, w, h, dpr, R, bez, kk, mag, ds, lx, ly, rim, bev, ck].map(v => typeof v === 'number' ? +v.toFixed(3) : v).join('|');
+    let G = LGX.geos.get(key); if (G) { LGX.geos.delete(key); LGX.geos.set(key, G); return G; }
+    const cx = w / 2, cy = h / 2, R0 = Math.min(w, h) / 2, hx = w / 2 - R, hy = h / 2 - R, N = W2 * H2;
     const sdf = ck ? (x, y) => { const dx = x - cx, dy = y - cy, a = Math.atan2(dy, dx); return (Math.sqrt(dx * dx + dy * dy) - R0 * (1 + .065 * Math.cos(9 * (a + Math.PI / 2))) / 1.065) * .93; }
       : (x, y) => { const qx = Math.abs(x - cx) - hx, qy = Math.abs(y - cy) - hy; return Math.min(Math.max(qx, qy), 0) + Math.sqrt(Math.max(qx, 0) ** 2 + Math.max(qy, 0) ** 2) - R; };
-    const smp = (X, Y, c) => { X = (X * sd) | 0; Y = (Y * sd) | 0; X = X < 0 ? 0 : X > mX ? mX : X; Y = Y < 0 ? 0 : Y > mY ? mY : Y; return s[(Y * sw + X) * 4 + c]; };
-    let p = 0;
-    for (let j = 0; j < H2; j++) {
+    const A = new Uint8Array(N), K = new Uint8Array(N), F = new Float32Array(N * 8);
+    for (let j = 0, i = 0; j < H2; j++) {
       const y = (j + .5) / dpr;
-      for (let i = 0; i < W2; i++, p += 4) {
-        const x = (i + .5) / dpr, d = sdf(x, y), aa = .5 - d * dpr; if (aa <= 0) { o[p + 3] = 0; continue; }
-        const depth = -d; let r, g, b;
-        const bx = ox + cx + (x - cx) / mag, by = oy + cy + (y - cy) / mag;
+      for (let ii = 0; ii < W2; ii++, i++) {
+        const x = (ii + .5) / dpr, d = sdf(x, y), aa = .5 - d * dpr; if (aa <= 0) continue;
+        A[i] = Math.max(1, Math.round((aa > 1 ? 1 : aa) * 255)); const depth = -d, bx = cx + (x - cx) / mag, by = cy + (y - cy) / mag, f = i * 8;
         if (depth < bez) {
           let nx = sdf(x + .5, y) - d, ny = sdf(x, y + .5) - d; const gl = Math.sqrt(nx * nx + ny * ny) || 1; nx /= gl; ny /= gl;
           const m = depth <= 0 ? 1 : Math.pow(1 - depth / bez, 2.4), dx = nx * m * kk, dy = ny * m * kk;
-          r = smp(bx + dx * (1 - ds), by + dy * (1 - ds), 0); g = smp(bx + dx, by + dy, 1); b = smp(bx + dx * (1 + ds), by + dy * (1 + ds), 2);
-          r = r * (1 - ta) + tr * ta; g = g * (1 - ta) + tg * ta; b = b * (1 - ta) + tb * ta;
-          const lit = -(nx * lx + ny * ly), sh2 = m * bev * lit * 255; r += sh2; g += sh2; b += sh2;
-          const ra = Math.max(0, 1 - depth / 1.5) * rim * (.3 + .7 * Math.max(0, lit)); if (ra > 0) { r = r * (1 - ra) + rc * ra; g = g * (1 - ra) + rc * ra; b = b * (1 - ra) + rc * ra; }
-        } else { r = smp(bx, by, 0) * (1 - ta) + tr * ta; g = smp(bx, by, 1) * (1 - ta) + tg * ta; b = smp(bx, by, 2) * (1 - ta) + tb * ta; }
-        o[p] = r; o[p + 1] = g; o[p + 2] = b; o[p + 3] = (aa > 1 ? 1 : aa) * 255;
+          const lit = -(nx * lx + ny * ly);
+          K[i] = 2; F[f] = bx + dx * (1 - ds); F[f + 1] = by + dy * (1 - ds); F[f + 2] = bx + dx; F[f + 3] = by + dy; F[f + 4] = bx + dx * (1 + ds); F[f + 5] = by + dy * (1 + ds);
+          F[f + 6] = m * bev * lit * 255; F[f + 7] = Math.max(0, 1 - depth / 1.5) * rim * (.3 + .7 * Math.max(0, lit));
+        } else { K[i] = 1; F[f] = bx; F[f + 1] = by; }
       }
     }
+    G = { A, K, F }; LGX.geos.set(key, G); if (LGX.geos.size > 24) LGX.geos.delete(LGX.geos.keys().next().value);
+    return G;
   },
   /* plate look for the current theme */
   plateLook(dark, extra) { return Object.assign(dark ? { tint: [40, 40, 46, .16], rim: .5, rc: 230, bevel: .14 } : { tint: [240, 240, 244, .16], rim: .9, rc: 255, bevel: .18 }, { refr: LGX.cfg.refr, bezel: LGX.cfg.bezel, disp: .03 }, extra || {}); },
@@ -2495,7 +2520,7 @@ const TILT = {
       const a = e.accelerationIncludingGravity; if (!a || a.x == null || a.y == null) return; TILT.motion = true;
       /* platforms disagree on the sign: check it once against the orientation angles */
       if (TILT.n < 30 && TILT.beta != null && Math.abs(Math.sin(TILT.beta * Math.PI / 180)) > .5 && Math.abs(a.y) > 4) { TILT.vote += Math.sign(a.y) === Math.sign(Math.sin(TILT.beta * Math.PI / 180)) ? -1 : 1; TILT.n++; if (TILT.n >= 8) TILT.inv = TILT.vote > 0 ? 1 : 0; }
-      const k = TILT.inv ? -1 : 1; TILT.x = cl(-a.x * k / 9.81); TILT.y = cl(a.y * k / 9.81);
+      const k = TILT.inv ? -1 : 1; TILT.x += (cl(-a.x * k / 9.81) - TILT.x) * .4; TILT.y += (cl(a.y * k / 9.81) - TILT.y) * .4;
     };
     const add = () => { window.addEventListener('deviceorientation', onO); window.addEventListener('devicemotion', onM); };
     const DO = window.DeviceOrientationEvent, DM = window.DeviceMotionEvent;
@@ -2601,7 +2626,7 @@ function GlassBar(items, active, onchange, { source, side } = {}) {
       vB = (vB + (tgt - xB) * K) * Dm; xB += vB;
       tv = (tv + ((free ? clamp(TILT.x * 1.5, -1.15, 1.15) : 0) - tx) * .05) * .87; tx += tv;
       tyv = (tyv + ((free ? clamp(TILT.y, -1.1, 1.1) : 0) - ty) * .05) * .87; ty += tyv;
-      const av = Math.abs(vB), slosh = Math.min(.25, Math.hypot(tv, tyv) * 2.2);
+      const av = Math.abs(vB), slosh = Math.min(.25, Math.max(0, Math.hypot(tv, tyv) * 2.2 - .012)); /* small dead zone: a phone held still doesn't make the drop shiver */
       const pull = press && !held ? Math.abs(pOff) / bw : 0;
       sv = (sv + (Math.min(.4, av * .032 + pull * .3 + (press ? .05 : 0) + slosh) - sd) * .2) * .8; sd += sv; sd = clamp(sd, -.16, .42);
       asy += (Math.min(.24, av * .022 + pull * .3) - asy) * .3;
@@ -2614,7 +2639,7 @@ function GlassBar(items, active, onchange, { source, side } = {}) {
     if (Math.abs(sd) < .002 && Math.abs(sv) < .002) { sd = 0; sv = 0; } if (asy < .002) asy = 0; if (Math.abs(lift - (held ? 1.1 : 1)) < .002) lift = held ? 1.1 : 1;
     if (press && !held && Math.abs(pOff) > 2) dir = pOff > 0 ? 1 : -1; else if (vB > .05) dir = 1; else if (vB < -.05) dir = -1;
     if (pb < .05 && !press) pb = 0;
-    const target = held ? 1 : press ? .85 : Math.min(1, Math.max(Math.abs(vB) / 2.5, Math.min(.5, Math.hypot(tv, tyv) * 5))); Iv = target > Iv ? Iv + (target - Iv) * .5 : Iv + (target - Iv) * .14; if (Iv < .02) Iv = 0;
+    const target = held ? 1 : press ? .85 : Math.min(1, Math.max(Math.abs(vB) / 2.5, Math.min(.5, Math.max(0, Math.hypot(tv, tyv) * 5 - .06)))); Iv = target > Iv ? Iv + (target - Iv) * .5 : Iv + (target - Iv) * .14; if (Iv < .02) Iv = 0;
   };
   const frame = () => {
     if (!el.isConnected || !el.offsetParent) { lastT = 0; return; }
@@ -2640,7 +2665,8 @@ function GlassBar(items, active, onchange, { source, side } = {}) {
     const av = Math.abs(vB), sx = 1 + sd, sy = 1 - sd * .55;
     let xA = xB, rA = 0, rn = 0;
     if (rem) { const dist = Math.abs(xB - rem.x), brk = bw * 1.15, p = Math.min(1, dist / brk); xA = rem.x; rA = 28 * .62 * rem.s * (1 - .5 * p); rn = rem.broken ? 0 : 28 * .34 * rem.s * Math.pow(1 - p, 1.1); }
-    const gk = [pk, xB.toFixed(2), sd.toFixed(4), asy.toFixed(3), lift.toFixed(3), Iv.toFixed(3), xA.toFixed(1), rA.toFixed(2), rn.toFixed(2), pb.toFixed(2), pbx.toFixed(1), pby.toFixed(1), cur, hoverI, tx.toFixed(3), ty.toFixed(3)].join('|');
+    const qt = v => Math.round(v * 60) / 60; /* tilt quantised: sensor noise alone no longer redraws the drop */
+    const gk = [Iv > 0 ? pk : dk, xB.toFixed(2), sd.toFixed(4), asy.toFixed(3), lift.toFixed(3), Iv.toFixed(3), xA.toFixed(1), rA.toFixed(2), rn.toFixed(2), pb.toFixed(2), pbx.toFixed(1), pby.toFixed(1), cur, hoverI, qt(tx), qt(ty)].join('|');
     if (gk === gKey) return; gKey = gk;
     if (Iv > 0) {
       const bk = [pk, cur, hoverI, held].join('|');
@@ -2650,7 +2676,7 @@ function GlassBar(items, active, onchange, { source, side } = {}) {
     /* at rest the drop fills its tab (same 4 px edge margin as Téléphone); deformation amounts stay those of the Téléphone drop */
     /* gravity: down = flattened against the bottom over the whole tab; sideways = pushed to the side, narrower */
     const Rh = Math.min(31, 28 * lift * sy), Wh = Math.max(Rh, bwF / 2 + bw / 2 * (lift * sx - 1));
-    const gk2 = [tx.toFixed(3), ty.toFixed(3), Wh.toFixed(1), Rh.toFixed(1)].join('|'); if (gk2 !== gKeyG) { gKeyG = gk2; G = gravShape(tx, ty, Wh, Rh); }
+    const gk2 = [qt(tx), qt(ty), Wh.toFixed(1), Rh.toFixed(1)].join('|'); if (gk2 !== gKeyG) { gKeyG = gk2; G = gravShape(qt(tx), qt(ty), Wh, Rh); }
     const gw = held || press || !G.m ? 0 : Math.max(0, 1 - av / 2.2);
     LGX.goo({
       xB, Wh, Rh, rb: Rh * (1 - asy), dir, xA, rA, rn, bez: 13, pbx, pby, pb, gw, G, lx: .5 * Math.cos(tx * .8) - .85 * Math.sin(tx * .8), ly: .5 * Math.sin(tx * .8) + .85 * Math.cos(tx * .8),
