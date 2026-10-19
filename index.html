@@ -1387,12 +1387,25 @@ input[type=date].tf,input[type=time].tf{padding-right:10px}
 /* the fake phone stops above the real phone's home-gesture zone: black band below */
 body.full .screen{bottom:calc(env(safe-area-inset-bottom, 0px) + 30px);border-radius:0 0 30px 30px}
 /* Home dock: Liquid Glass (lens of the wallpaper) */
-#dock.lgx-dock{background:transparent;-webkit-backdrop-filter:none;backdrop-filter:none;overflow:hidden;isolation:isolate;
+#dock.lgx-home,.wd.lgx-home{background:transparent;-webkit-backdrop-filter:none;backdrop-filter:none;overflow:hidden;isolation:isolate;
   box-shadow:0 10px 28px rgba(0,0,0,.45);--dk-tint:rgba(40,40,46,.16);--dk-rim:inset 1px 1px 0.5px rgba(200,200,210,.35), inset -1px -1px 0.5px rgba(200,200,210,.14), inset 0 0 0 1px rgba(160,160,170,.12)}
-:root[data-mode="light"] #dock.lgx-dock{box-shadow:0 10px 28px rgba(20,20,40,.18), 0 1px 3px rgba(20,20,40,.1);--dk-tint:rgba(236,236,240,.16);
+:root[data-mode="light"] #dock.lgx-home,:root[data-mode="light"] .wd.lgx-home{box-shadow:0 10px 28px rgba(20,20,40,.18), 0 1px 3px rgba(20,20,40,.1);--dk-tint:rgba(236,236,240,.16);
   --dk-rim:inset 1px 1px 0.5px rgba(250,250,252,.75), inset -1px -1px 0.5px rgba(235,235,240,.45), inset 0 0 0 1px rgba(170,170,180,.22)}
-#dock.lgx-dock>.lgx-c{position:absolute;inset:0;width:100%;height:100%;z-index:-2;pointer-events:none}
-#dock .dock-tint{position:absolute;inset:0;border-radius:inherit;background:var(--dk-tint);box-shadow:var(--dk-rim);z-index:-1;pointer-events:none}
+#dock.lgx-home>.lgx-c,.wd.lgx-home>.lgx-c,.wd-clock.lgx-home .shape>.lgx-c{position:absolute;inset:0;width:100%;height:100%;z-index:-2;pointer-events:none}
+#dock .dock-tint,.wd .dock-tint{position:absolute;inset:0;border-radius:inherit;background:var(--dk-tint);box-shadow:var(--dk-rim);z-index:-1;pointer-events:none}
+/* clock widget: the cookie shape is glass; the shape keeps turning but the view through it stays still */
+.wd-clock.lgx-home{background:transparent;box-shadow:none;overflow:visible}
+.wd-clock.lgx-home .shape{animation:none;background:rgba(220,220,230,.30);isolation:isolate}
+:root[data-mode="light"] .wd-clock.lgx-home .shape{background:rgba(255,255,255,.85)}
+.wd-clock.lgx-home .shape>.lgx-c,.wd-clock.lgx-home .shape>.dock-tint{inset:1.5px;width:auto;height:auto;clip-path:var(--shape-cookie9);border-radius:0;box-shadow:none}
+.wd-clock.lgx-home .shape>.dock-tint{background:var(--dk-tint)}
+.wd-clock.lgx-home{--dk-tint:rgba(40,40,46,.22)}
+:root[data-mode="light"] .wd-clock.lgx-home{--dk-tint:rgba(236,236,240,.22)}
+.wd-clock.lgx-home .t{color:var(--on-s)}
+.wd-clock.lgx-home .t span:last-child{color:var(--primary)}
+:root:not([data-mode="light"]) .wd.lgx-home .t span,:root:not([data-mode="light"]) .wd.lgx-home .num{text-shadow:0 0 8px rgba(0,0,0,.45)}
+/* hidden banner goes fully above the screen (it was still peeking under the status bar) */
+#banner:not(.on){transform:translateY(calc(-100% - var(--sat) - 48px))}
 </style>
 </head>
 <body>
@@ -2728,7 +2741,7 @@ async function wallURL(key = S.settings.wallpaper) {
   if (!WALLCACHE.has(ck)) WALLCACHE.set(ck, drawWall(key, S.settings.hue, S.settings.cm, light).toDataURL('image/jpeg', .9));
   return WALLCACHE.get(ck);
 }
-async function applyWall() { const u = await wallURL(); L.wall.style.backgroundImage = `url("${u}")`; setTimeout(() => dockGlass($('#dock')), 50); const lw = $('.lwall', L.lock); if (lw) lw.style.backgroundImage = `url("${u}")`; }
+async function applyWall() { const u = await wallURL(); L.wall.style.backgroundImage = `url("${u}")`; setTimeout(() => homeGlass(), 50); const lw = $('.lwall', L.lock); if (lw) lw.style.backgroundImage = `url("${u}")`; }
 
 /* ---------- Status bar ---------- */
 const BATT = { level: .82, charging: false };
@@ -2779,24 +2792,35 @@ const WIDGETS = {
       r.length ? r.map(x => h('div', { class: 'it' }, h('i', { onclick: e => { e.stopPropagation(); x.done = true; x.doneAt = now(); SND.play('tap'); save('reminders'); } }), h('span', {}, x.text))) : h('div', { class: 'muted', style: 'font-size:13px' }, 'Tout est fait 🎉'));
   },
 };
-/* Home dock in Liquid Glass: a lens of the wallpaper behind it (same field as the bars:
-   refraction 70, bezel 22, bulge .35), lightly tinted. The wallpaper doesn't move behind the
-   dock, so the lens is computed once per wallpaper / size / theme. */
-function dockGlass(dock, tries = 0) {
-  if (!dock || !dock.isConnected) return;
-  const wi = GOV.wallImg(); if (!wi && /url\(/.test(L.wall.style.backgroundImage || '') && tries < 25) { setTimeout(() => dockGlass(dock, tries + 1), 200); return; }
-  const sr = SCR.getBoundingClientRect(), dr = dock.getBoundingClientRect(), dw = Math.round(dr.width / SC), dh = Math.round(dr.height / SC); if (!dw || !dh) return;
-  const dpr = Math.min(2, window.devicePixelRatio || 1), Wd = Math.round(sr.width / SC), Hd = Math.round(sr.height / SC);
+/* Home screen glass (dock, clock and calendar widgets): lenses of the wallpaper behind them
+   (same field as the bars: refraction 70, bezel 22, bulge .35), lightly tinted. The wallpaper
+   doesn't move behind them, so each lens is computed once per wallpaper / size / theme. */
+const WG = { key: '', src: null, fields: new Map() };
+function wallSrc() {
+  const sr = SCR.getBoundingClientRect(), Wd = Math.round(sr.width / SC), Hd = Math.round(sr.height / SC), wi = GOV.wallImg(), dpr = Math.min(2, window.devicePixelRatio || 1);
+  const key = [L.wall.style.backgroundImage, Wd, Hd, dpr, D.documentElement.dataset.mode, !!wi].join('|'); if (WG.key === key && WG.src) return WG.src;
   const cv = mkCanvas(Math.round(Wd * dpr), Math.round(Hd * dpr)), x = cv.getContext('2d'); x.scale(dpr, dpr);
   x.fillStyle = getComputedStyle(L.wall).backgroundColor || '#141714'; x.fillRect(0, 0, Wd, Hd);
   if (wi) { const k = Math.max(Wd / wi.naturalWidth, Hd / wi.naturalHeight), w = wi.naturalWidth * k, hh = wi.naturalHeight * k; x.drawImage(wi, (Wd - w) / 2, (Hd - hh) / 2, w, hh); }
-  const src = { data: x.getImageData(0, 0, cv.width, cv.height).data, w: cv.width, h: cv.height, d: dpr, W: Wd, H: Hd };
-  const f = LGX.field(dw, dh, LGX.cfg.bezel, dpr, .35, 34), c = dock.querySelector(':scope > .lgx-c') || h('canvas', { class: 'lgx-c', 'aria-hidden': 'true' });
+  WG.key = key; WG.src = { data: x.getImageData(0, 0, cv.width, cv.height).data, w: cv.width, h: cv.height, d: dpr, W: Wd, H: Hd };
+  return WG.src;
+}
+function wallGlass(el, R, target = el) {
+  if (!el || !el.isConnected) return;
+  const src = wallSrc(), sr = SCR.getBoundingClientRect(), dr = el.getBoundingClientRect(), dw = Math.round(el.offsetWidth), dh = Math.round(el.offsetHeight); if (!dw || !dh) return;
+  const fk = [dw, dh, R, src.d].join('|'); let f = WG.fields.get(fk); if (!f) { f = LGX.field(dw, dh, LGX.cfg.bezel, src.d, .35, R); WG.fields.set(fk, f); if (WG.fields.size > 12) WG.fields.delete(WG.fields.keys().next().value); }
+  const c = target.querySelector(':scope > .lgx-c') || h('canvas', { class: 'lgx-c', 'aria-hidden': 'true' });
   c.width = f.w; c.height = f.h; const cx = c.getContext('2d'), out = cx.createImageData(f.w, f.h);
   LGX.lens(f, src, (dr.left - sr.left) / SC, (dr.top - sr.top) / SC, LGX.cfg.refr, LGX.cfg.disp, 1, 1, out); cx.putImageData(out, 0, 0);
-  if (c.parentNode !== dock) dock.prepend(c, h('div', { class: 'dock-tint', 'aria-hidden': 'true' }));
-  dock.classList.add('lgx-dock');
+  if (c.parentNode !== target) target.prepend(c, h('div', { class: 'dock-tint', 'aria-hidden': 'true' }));
+  el.classList.add('lgx-home');
 }
+function homeGlass(tries = 0) {
+  if (!GOV.wallImg() && /url\(/.test(L.wall.style.backgroundImage || '') && tries < 25) { setTimeout(() => homeGlass(tries + 1), 200); return; }
+  const dock = $('#dock'), ck = $('.wd-clock', L.home), ag = $('.wd-agenda', L.home);
+  wallGlass(dock, 34); if (ck) wallGlass(ck, ck.offsetWidth / 2, $('.shape', ck)); if (ag) wallGlass(ag, 28);
+}
+const dockGlass = () => homeGlass();
 function renderHome() {
   if (!S) return;
   const home = L.home; if (!home) return;
@@ -2809,7 +2833,7 @@ function renderHome() {
   const hint = h('button', { id: 'drawhint', 'aria-label': 'Toutes les applications', onclick: () => openDrawer() }, I('keyboard_arrow_up'), newApps().length ? h('i', { class: 'nd' }) : null);
   const dock = h('div', { id: 'dock' }, S.home.dock.filter(id => APPS[id]).map((id, i) => appIcon(id, { loc: 'dock:' + i })));
   const done = Btn('OK', () => setEdit(false), { kind: 'filled' }); done.id = 'editdone';
-  home.replaceChildren(pagesEl, hint, dock, done); requestAnimationFrame(() => dockGlass(dock));
+  home.replaceChildren(pagesEl, dock, done); requestAnimationFrame(() => homeGlass());
   home.classList.toggle('edit', OS.edit);
   if (OS.overlay === 'drawer') renderDrawer();
 }
@@ -2929,7 +2953,8 @@ function setupHome() {
       clearTimeout(st.lp); if (st.long) return false;
       if (OS.edit && st.ico) { st.mode = 'icon'; iconDragStart(st, st.ico); return; }
       if (Math.abs(st.dx) > Math.abs(st.dy) || OS.edit) return false;
-      st.mode = st.dy > 0 ? 'search' : 'drawer';
+      if (st.dy < 0) return false; /* no app drawer any more: everything is in the search (pull down) */
+      st.mode = 'search';
     },
     move(st, ev) {
       if (st.mode === 'icon') return iconDragMove(st, ev);
