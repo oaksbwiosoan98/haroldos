@@ -1284,7 +1284,10 @@ input[type=date].tf,input[type=time].tf{padding-right:10px}
 #banner{top:calc(var(--sat) + 2px)}
 #banner.lgov{background:none}
 #banner.lgov .ncard{background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:0 10px 30px rgb(0 0 0 / .35)}
-#banner.lgov .ncard>.ccg-c{filter:blur(1px)}
+#banner.lgov .ncard>.ccg-c{filter:none}
+#banner.lgov .ncard{box-shadow:0 12px 32px rgb(0 0 0 / .28)}
+#banner.lgov .ncard :is(.nh,.nt,.nb){text-shadow:0 1px 2px rgb(0 0 0 / .35)}
+[data-mode=light] #banner.lgov .ncard :is(.nh,.nt,.nb){text-shadow:0 1px 2px rgb(255 255 255 / .6)}
 #lock .lnotifs{display:none}
 /* Navigateur: floating Liquid Glass toolbar */
 .lgdock{height:60px;color:var(--lgx-ink)}
@@ -2379,6 +2382,10 @@ const LGX = {
         el.querySelectorAll('path').forEach(p => { if (p.getAttribute('fill') === 'none') return; try { x.fill(new Path2D(p.getAttribute('d'))); } catch (e) { } });
         el.querySelectorAll('circle').forEach(c => { x.beginPath(); x.arc(+c.getAttribute('cx'), +c.getAttribute('cy'), +c.getAttribute('r'), 0, 7); x.fill(); });
         x.restore(); continue;
+      }
+      if (el.tagName === 'IFRAME') { /* a website opened through the proxy: its visible part, so glass over it (banners…) bends the site */
+        try { const d2 = el.contentDocument; if (d2 && d2.body && d2.URL !== 'about:blank') { const w2 = d2.defaultView, sy2 = w2.scrollY || 0, rd = LGX.rasterDoc(d2, sy2, sy2 + (w2.innerHeight || b.h), 1); x.drawImage(rd.cv, b.l, b.t, b.w, b.h); } } catch (e) { }
+        continue;
       }
       if (el.tagName === 'IMG' || el.tagName === 'CANVAS') {
         if (!/(^| )(lgx-c|lgx-goo|lgx-bc|ccg-c|ngl-c|ccg-bg|shade-wall)( |$)/.test(el.getAttribute('class') || '')) try { if (el.tagName === 'IMG') { if (el.complete && el.naturalWidth) LGX.fit(x, el, el.naturalWidth, el.naturalHeight, b, cs.objectFit); } else if (el.width && el.height) LGX.fit(x, el, el.width, el.height, b, 'fill'); } catch (e) { }
@@ -3648,9 +3655,11 @@ const GOV = {
       const x = cv.getContext('2d'), out = x.createImageData(f.w, f.h), cx = w / 2, cy = hh / 2;
       const rl = (r.left - s.rect.left) / SC, rt = (r.top - s.rect.top) / SC;
       if (on && !prim) prim = GOV.color('var(--primary)');
-      if (!ex && !el.classList.contains('ncard')) { /* glass plate like the drop: bent edge, bevel, specular rim; tinted with the theme colour when on */
+      const bnr = !!el.closest('#banner');
+      if ((!ex && !el.classList.contains('ncard')) || bnr) { /* glass plate like the drop: bent edge, bevel, specular rim; tinted with the theme colour when on */
         const pr2 = on ? LGX.rgb(prim) : null, look = LGX.plateLook(dark, { R, refr: cfg.refr * (Math.min(w, hh) < 80 ? .75 : 1), mag: 1 / sc, bezel: Math.min(cfg.bezel, R * .9) });
         if (on) look.tint = [pr2[0], pr2[1], pr2[2], dark ? .5 : .55];
+        if (bnr) { look.tint = dark ? [30, 30, 36, .34] : [246, 246, 250, .40]; look.refr = cfg.refr; } /* live banner: the same glass plate, a little more tint so the text stays readable over any app */
         LGX.plate(s, rl + cx * sc - cx, rt + cy * sc - cy, w, hh, dpr, look, out); x.putImageData(out, 0, 0); return;
       }
       LGX.lens(f, s, rl + cx * sc - cx, rt + cy * sc - cy, cfg.refr * sc * (Math.min(w, hh) < 80 ? .75 : 1), 0, 1 / sc, 1.15, out);
