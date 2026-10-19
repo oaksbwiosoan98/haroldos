@@ -2005,6 +2005,7 @@ textarea.tf{padding:11px 14px}
 :root[data-mode="light"] .ico.gl .bg{color:#1C1C1E}
 :root[data-mode="light"] .ico.gl .bg .ms{filter:drop-shadow(0 1px 2px rgb(255 255 255 / .6))}
 :root[data-mode="light"] .ico.gl .bg > .lgx-c{filter:drop-shadow(0 4px 9px rgb(20 20 40 / .14))}
+.shint{font-size:13px;color:var(--label2);margin:-2px 32px 10px}
 </style>
 </head>
 <body>
@@ -3648,12 +3649,12 @@ function homeLongPress(icoEl, st) {
   const id = icoEl.dataset.app, a = APPS[id], loc = icoEl.dataset.loc, r = screenRect($('.sh', icoEl));
   const onHome = S.home.dock.includes(id) || S.home.pages.some(p => p.includes(id));
   const items = [...(a.quick || []).map(q => ({ icon: q.icon, label: q.label, onclick: () => launch(id, q.link) })),
-    loc === 'lib' ? (onHome ? null : { icon: 'add_to_home_screen', label: 'Ajouter à l\'accueil', onclick: () => { addToHome(id); } })
+    loc === 'lib' ? (onHome ? { icon: 'remove_circle_outline', label: 'Retirer de l\'accueil', danger: true, onclick: () => removeFromHome(id) } : { icon: 'add_to_home_screen', label: 'Ajouter à l\'accueil', onclick: () => { addToHome(id); } })
       : { icon: 'apps', label: 'Modifier l\'écran d\'accueil', onclick: () => setEdit(true) },
     loc !== 'lib' ? { icon: 'remove_circle_outline', label: 'Retirer de l\'accueil', danger: true, onclick: () => removeFromHome(id) } : null];
   menu(L.sys, r.x, r.y + r.h + 10, items);
 }
-function addToHome(id) { const p = S.home.pages[0] = S.home.pages[0] || []; if (p.length >= 12) { toast(SCR, 'Plus de place sur l\'écran d\'accueil'); return; } p.push(id); save('home'); renderHome(); toast(SCR, APPS[id].name + ' ajoutée à l\'accueil'); }
+function addToHome(id) { const p = S.home.pages[0] = S.home.pages[0] || []; if (p.length >= HG.cols * (HG.rows - 2)) { toast(SCR, 'Plus de place sur l\'écran d\'accueil'); return; } p.push(id); save('home'); renderHome(); toast(SCR, APPS[id].name + ' ajoutée à l\'accueil'); }
 function removeFromHome(id) { S.home.dock = S.home.dock.filter(x => x !== id); S.home.pages = [(S.home.pages[0] || []).filter(x => x !== id)]; save('home'); renderHome(); toast(SCR, APPS[id].name + ' reste accessible depuis la recherche'); }
 function locGet(loc) { const [a, b] = loc.split(':'); return a === 'dock' ? [S.home.dock, +b] : [S.home.pages[0], +b]; }
 function iconDragStart(st, ico) {
@@ -4546,8 +4547,15 @@ function renderSearch(q, res) {
     res.replaceChildren(...out); searchGlass(res); return;
   }
   if (/^[\d\s.,+\-*/×÷()%]+$/.test(q) && /[+\-*/×÷%]/.test(q)) { const r = calcEval(q); if (r != null && isFinite(r)) out.push(mark(h('div', { class: 'calc', onclick: () => launch('calculatrice', { expr: q }) }, h('small', {}, q + ' ='), CALC.fmt(r)))); }
-  const apps = Object.values(APPS).filter(a => !a.alias && !a.system).filter(a => norm(a.name).includes(nq) || (a.keys && norm(a.keys).includes(nq)));
-  if (apps.length) out.push(h('div', { class: 'sect' }, 'Applications'), h('div', { class: 'sapps' }, apps.map(a => { const ic = appIcon(a.id); ic.onclick = () => launch(a.id); mark(ic); return ic; })));
+  /* "applications" (or "apps") lists every app, like the App Library: hold one to add it to / remove it from the home screen */
+  const allQ = nq === 'apps' || (nq.length >= 3 && 'applications'.startsWith(nq)) || nq === 'toutes les applications';
+  const apps = allQ ? drawerApps() : Object.values(APPS).filter(a => !a.alias && !a.system).filter(a => norm(a.name).includes(nq) || (a.keys && norm(a.keys).includes(nq)));
+  const libIcon = a => { const ic = appIcon(a.id, { loc: 'lib' }); let lp = null, long = false;
+    ic.addEventListener('pointerdown', () => { long = false; clearTimeout(lp); lp = setTimeout(() => { long = true; homeLongPress(ic); }, 450); });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => ic.addEventListener(ev, () => clearTimeout(lp)));
+    ic.addEventListener('contextmenu', e => e.preventDefault());
+    ic.onclick = () => { if (long) { long = false; return; } launch(a.id); }; mark(ic); return ic; };
+  if (apps.length) out.push(h('div', { class: 'sect' }, allQ ? 'Toutes les applications' : 'Applications'), allQ ? h('div', { class: 'shint' }, 'Maintenez une app pour l\'ajouter à l\'écran d\'accueil ou l\'en retirer.') : null, h('div', { class: 'sapps' }, apps.map(libIcon)));
   const sec = (title, items) => { if (items.length) out.push(h('div', { class: 'sect' }, title), Group(...items.slice(0, 5).map(mark))); };
   sec('Contacts', S.contacts.filter(c => norm(c.first + ' ' + c.last + ' ' + c.phone).includes(nq)).map(c => Li({ lead: Avatar(c, 40), title: fullName(c), sub: c.phone, onclick: () => launch('contacts', { contact: c.id }) })));
   sec('Notes', S.notes.filter(n => norm(n.title + ' ' + n.body).includes(nq)).map(n => Li({ lead: Lic('sticky_note_2'), title: n.title || n.body.split('\n')[0], sub: n.body.replace(/\n/g, ' '), onclick: () => launch('notes', { note: n.id }) })));
