@@ -3776,7 +3776,8 @@ function homeCells() {
   ids.forEach(id => { if (C[id] == null || C[id] < HG.first) { for (let i = HG.first; i < HG.cols * HG.rows; i++) if (!used.has(i)) { C[id] = i; used.add(i); break; } } });
   return C;
 }
-function dockTop() { const d = $('#dock'); return d ? screenRect(d).y : H - 130; }
+function dockTop() { /* layout position (offsets), not the on-screen one: a render during the unlock zoom must not shift the grid */
+  const d = $('#dock'); if (!d) return H - 130; let y = 0, e = d; for (; e && e !== SCR; e = e.offsetParent) y += e.offsetTop; return e === SCR ? y : screenRect(d).y; }
 function homeTop() {
   const d = new Date(now()), c = S.weather && S.weather.cache, cur = c && c.data && c.data.current, dl = c && c.data && c.data.daily;
   const wx = cur ? wmo(cur.weather_code, cur.is_day) : null;
