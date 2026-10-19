@@ -3921,12 +3921,22 @@ function showBanner(n) {
 function hideBanner() { L.banner.classList.remove('on'); clearTimeout(bannerT); BGL.start(); }
 /* Live banner in Liquid Glass: the screen behind is captured when it arrives and the card bends it while it slides in, is pulled up or leaves. */
 const BGL = {
-  snap: null, until: 0, running: false,
+  snap: null, until: 0, running: false, sig: '', tT: 0,
+  /* capture what is behind the banner (current app or home, wallpaper, a website shown in the browser) */
+  take() {
+    const t = GOV.target(), dpr = Math.min(2, window.devicePixelRatio || 1), wi = GOV.wallImg();
+    const sn = LGX.raster(t, dpr, { flat: true, under: (x, W, H) => { if (!wi) return; const k = Math.max(W / wi.naturalWidth, H / wi.naturalHeight), w = wi.naturalWidth * k, hh = wi.naturalHeight * k; x.drawImage(wi, (W - w) / 2, (H - hh) / 2, w, hh); } });
+    sn.rect = t.getBoundingClientRect(); BGL.snap = sn; BGL.ver = (BGL.ver || 0) + 1; BGL.tT = performance.now();
+  },
+  /* cheap fingerprint of the screen behind: which app, where it is, how far it is scrolled */
+  sign() {
+    const t = GOV.target(); if (!t) return ''; const r = t.getBoundingClientRect(), sc = LGX.scroller(t); let fy = 0;
+    const fr = t.querySelector && t.querySelector('.br-ext iframe'); if (fr) try { fy = fr.contentWindow.scrollY || 0; } catch (e) { }
+    return [OS.mode, OS.current, OS.locked, r.left.toFixed(0), r.top.toFixed(0), r.width.toFixed(0), sc ? sc.scrollTop : 0, fy, L.wall.style.backgroundImage.length, D.documentElement.dataset.mode].join('|');
+  },
   show(card) {
     try {
-      const t = GOV.target(), dpr = Math.min(2, window.devicePixelRatio || 1), wi = GOV.wallImg();
-      BGL.snap = LGX.raster(t, dpr, { flat: true, under: (x, W, H) => { if (!wi) return; const k = Math.max(W / wi.naturalWidth, H / wi.naturalHeight), w = wi.naturalWidth * k, hh = wi.naturalHeight * k; x.drawImage(wi, (W - w) / 2, (H - hh) / 2, w, hh); } });
-      BGL.snap.rect = t.getBoundingClientRect(); BGL.ver = (BGL.ver || 0) + 1;
+      BGL.take(); BGL.sig = BGL.sign();
       L.banner.classList.add('lgov'); card.classList.add('lgg'); card._lgc = h('canvas', { class: 'ccg-c', 'aria-hidden': 'true' }); card.prepend(card._lgc);
     } catch (e) { BGL.snap = null; L.banner.classList.remove('lgov'); }
   },
@@ -3934,6 +3944,9 @@ const BGL = {
   frame() {
     const on = L.banner.classList.contains('on');
     if (!BGL.snap || (!on && performance.now() > BGL.until)) { BGL.running = false; return; }
+    /* the screen behind changed (other app, home, scrolling, animation): capture it again so the glass
+       never keeps the old screen printed in it */
+    const sg = BGL.sign(); if (sg !== BGL.sig && performance.now() - BGL.tT > 90) { BGL.sig = sg; try { BGL.take(); } catch (e) { } }
     try { GOV.paintIn(L.banner, BGL.snap, BGL.ver); } catch (e) { }
     requestAnimationFrame(BGL.frame);
   },
