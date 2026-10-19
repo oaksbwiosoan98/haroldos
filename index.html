@@ -2934,8 +2934,8 @@ function renderHome(force) {
   const done = Btn('OK', () => setEdit(false), { kind: 'filled' }); done.id = 'editdone';
   home.replaceChildren(h('div', { id: 'pages', style: { width: W + 'px' } }, pg), dock, done);
   const g = homeGeom(), C = homeCells();
-  const top = homeTop(); top.style.left = g.left + 'px'; top.style.top = g.top + 6 + 'px'; top.style.width = g.cw * 4 + 'px'; top.style.height = g.ch * 2 - 12 + 'px'; pg.append(top);
-  Object.entries(C).forEach(([id, i]) => { if (i >= HG.cols * HG.rows) return; const el = appIcon(id, { loc: '0:' + i }), c = g.cell(i); el.dataset.key = 'app:' + id; el.style.left = c.x + (g.cw - 88) / 2 + 'px'; el.style.top = c.y + Math.max(0, (g.ch - 86) / 2) + 'px'; pg.append(el); });
+  const top = homeTop(); top.style.left = g.left + 'px'; top.style.top = g.top + 2 + 'px'; top.style.width = g.cw * 4 + 'px'; top.style.height = Math.round(g.ch * 2 - 30) + 'px'; /* clear gap above the first row of apps */ pg.append(top);
+  Object.entries(C).forEach(([id, i]) => { if (i >= HG.cols * HG.rows) return; const el = appIcon(id, { loc: '0:' + i }), c = g.cell(i); el.dataset.key = 'app:' + id; el.style.left = c.x + (g.cw - 88) / 2 + 'px'; el.style.top = c.y + Math.max(4, (g.ch - 86) / 2 + 6) + 'px'; pg.append(el); });
   requestAnimationFrame(() => homeGlass());
   home.classList.toggle('edit', OS.edit);
   if (!S.weather.cache || now() - S.weather.cache.at > 30 * MIN) { if (!homeTop.busy && typeof WX !== 'undefined') { homeTop.busy = true; WX.refresh().finally(() => { homeTop.busy = false; }); } }
