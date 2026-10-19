@@ -1512,7 +1512,7 @@ body.full .screen{bottom:calc(env(safe-area-inset-bottom, 0px) + 30px);border-ra
 }
 /* accent (tint): white / black with the Anthracite theme, the theme colour otherwise */
 :root[data-theme="anthracite"],:root[data-theme="anthracite"] .dark-scope{ --primary: #fff; --on-primary: #000; --primary-c: var(--bg3); --on-primary-c: var(--label); --tint: #fff }
-:root[data-theme="anthracite"][data-mode="light"]{ --primary: #000; --on-primary: #fff; --primary-c: #E5E5EA; --on-primary-c: #000; --tint: #000 }
+:root[data-theme="anthracite"][data-mode="light"]{ --primary: #007AFF; --on-primary: #fff; --primary-c: rgb(0 122 255 / .14); --on-primary-c: #007AFF; --tint: #007AFF }
 :root:not([data-theme="anthracite"]){ --tint: var(--primary) }
 
 /* ---------- 2. Typography (San Francisco scale) ---------- */
@@ -2027,7 +2027,7 @@ textarea.tf{padding:11px 14px}
 
 /* ---------- Téléphone in Liquid Glass (see PGL) ---------- */
 .pgl-on{color:var(--label)}
-.pgl-on .page,.pgl-on .tabpane,.pgl-on .lg-page{background:#000}
+.pgl-on .page,.pgl-on .tabpane,.pgl-on .lg-page{background:var(--bg)}
 .pgl-on .scroll,.pgl-on .dial,.pgl-on .composer{position:relative;isolation:isolate}
 .pgg-host{isolation:isolate}
 .pgg-c{position:absolute;left:0;top:0;width:100%;height:100%;z-index:-1;pointer-events:none}
@@ -2038,6 +2038,7 @@ textarea.tf{padding:11px 14px}
 .pgl > .pgl-c{position:absolute;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none}
 .pgl-on .lhead .acts{background:transparent!important;box-shadow:none!important}
 .pgl-on .page.nb-on .lhead .acts{background:linear-gradient(rgb(0 0 0 / .94) 78%,rgb(0 0 0 / 0))!important;box-shadow:none!important}
+:root[data-mode="light"] .pgl-on .page.nb-on .lhead .acts{background:linear-gradient(rgb(255 255 255 / .94) 78%,rgb(255 255 255 / 0))!important}
 /* rows become separate glass cards */
 .pgl-on .list{display:flex;flex-direction:column;gap:8px;padding:0 12px}
 .pgl-on .list > .li,.pgl-on .group > .li{border-radius:22px!important;padding:10px 14px;min-height:60px}
@@ -2055,11 +2056,12 @@ textarea.tf{padding:11px 14px}
 .pgl-on .dial-k .key{border-radius:50%}
 .pgl-on .key:active{transform:scale(.94)}
 .pgl-on .ct-ai{border-radius:18px}
-.pgl-on .bub.them,.pgl-on .bub.them.last,.pgl-on .bub.me,.pgl-on .bub.me.last{border-radius:20px!important;color:#fff}
+.pgl-on .bub.them,.pgl-on .bub.them.last,.pgl-on .bub.me,.pgl-on .bub.me.last{border-radius:20px!important;color:var(--label)}
+.pgl-on .bub.me,.pgl-on .bub.me.last{color:#fff}
 .pgl-on .typing{border-radius:20px}
 .pgl-on .cmp-box{border-radius:20px;box-shadow:none}
 .pgl-on .composer{background:transparent}
-.pgl-on .sect{margin:22px 28px 8px;color:rgb(235 235 245 / .7)}
+.pgl-on .sect{margin:22px 28px 8px;color:var(--label2)}
 </style>
 </head>
 <body>
@@ -2385,6 +2387,32 @@ function drawWall(kind, hue, cm = 1, light = false) {
     grain(g, W, H, R, 3);
     return c;
   }
+  if (kind === 'clair') {
+    /* bright white with vivid, clean-edged shapes (blue, violet, pink, coral, amber, turquoise):
+       plenty of colour and crisp edges so every glass plate visibly bends what is under it */
+    const K = (L, c, h0, a = 1) => oklchRGB(L, c, h0, a);
+    vgrad(g, W, H, [[0, K(.985, .008, 250)], [.5, K(.975, .01, 280)], [1, K(.965, .012, 300)]]);
+    const blob = (k2, x, y, s, rot, h0, h1, L0 = .78, L1 = .64, c = .16) => {
+      const sz = W * s; g.save(); g.translate(x * W, y * H); g.rotate(rot);
+      g.shadowColor = 'rgba(40,40,90,.16)'; g.shadowBlur = 50; g.shadowOffsetY = 18;
+      shapePath2D(g, k2, -sz / 2, -sz / 2, sz, sz);
+      const gr = g.createLinearGradient(-sz / 2, -sz / 2, sz / 2, sz / 2); gr.addColorStop(0, K(L0, c, h0)); gr.addColorStop(1, K(L1, c, h1));
+      g.fillStyle = gr; g.fill(); g.shadowColor = 'transparent'; g.lineWidth = 2.5; g.strokeStyle = 'rgba(255,255,255,.55)'; g.stroke(); g.restore();
+    };
+    blob('squircle', .86, .14, .62, .35, 255, 285);           /* blue → indigo */
+    blob('cookie9', .08, .31, .58, .2, 340, 10, .8, .68);      /* pink → rose */
+    blob('circle', .72, .47, .34, 0, 60, 40, .86, .76, .15);   /* amber → orange */
+    blob('flower8', .22, .66, .66, .5, 295, 320, .74, .6);     /* violet → magenta */
+    blob('clover4', .9, .8, .5, .7, 200, 230, .82, .68, .13);  /* turquoise → azure */
+    blob('squircle', .3, .97, .7, -.25, 25, 355, .78, .66);    /* coral → pink */
+    blob('circle', .55, .9, .16, 0, 85, 65, .9, .82, .15);     /* yellow */
+    g.lineWidth = 3;
+    for (let i = 0; i < 7; i++) { g.strokeStyle = `rgba(255,255,255,${.5 - i * .05})`; g.beginPath(); g.arc(W * .72, H * .47, W * (.2 + i * .045), 0, 7); g.stroke(); }
+    for (let i = 0; i < 9; i++) { g.strokeStyle = K(.6, .14, 265, .16 - i * .012); g.beginPath(); g.moveTo(-20, H * (.06 + i * .018)); g.bezierCurveTo(W * .35, H * (.0 + i * .02), W * .6, H * (.2 + i * .016), W + 20, H * (.12 + i * .02)); g.stroke(); }
+    for (let i = 0; i < 9; i++) { g.strokeStyle = K(.62, .14, 330, .14 - i * .01); g.beginPath(); g.moveTo(-20, H * (.86 + i * .014)); g.bezierCurveTo(W * .3, H * (.8 + i * .016), W * .7, H * (.98 + i * .01), W + 20, H * (.88 + i * .014)); g.stroke(); }
+    grain(g, W, H, R, 3);
+    return c;
+  }
   if (kind === 'anthracite') {
     /* near-neutral charcoal with crisp graphite shapes, fine light lines and one sage accent:
        strong edges everywhere so the Liquid Glass (widget, dock, bars) visibly bends what's under it */
@@ -2706,7 +2734,7 @@ function morePhoneData(S) {
 function ensureDefaults(S) {
   { const dl = (S.files || []).find(f => f.id === 'f-dl'); if (dl && dl.name === 'Téléchargements') dl.name = 'Téléchargés'; }
   if (S.notifSeed !== 2) { const keep = (S.notifs || []).filter(x => !['Bienvenue dans Harold OS'].includes(x.title) && !/^(Camille Durand|Wei Zhang|Appel manqué)$/.test(x.title)); S.notifs = [...keep, ...sampleNotifs()]; S.notifSeed = 2; }
-  S.settings.mode = 'dark'; /* apps stay black (no Settings app to change it) */
+  S.settings.mode = 'light'; /* the whole OS in light mode (no Settings app to change it) */
   if (S.home) { S.home.pages = (S.home.pages || []).map(pg => pg.filter(id => id !== 'parametres')); S.home.dock = (S.home.dock || []).filter(id => id !== 'parametres'); if (S.home.cells) delete S.home.cells.parametres; } /* no Settings app any more */
   /* every app on the home screen by default (the dock counts), each one once, no alias or system entry */
   if (S.home && !S.home.allApps1) { S.home.allApps1 = 1;
@@ -3616,7 +3644,7 @@ async function applyTheme() {
   await applyWall();
 }
 async function wallURL(key = S.settings.wallpaper) {
-  if (!WALLCACHE.has('blanc')) WALLCACHE.set('blanc', drawWall('anthracite', 260, 0, true).toDataURL('image/jpeg', .92)); /* one wallpaper only: white with shapes */
+  if (!WALLCACHE.has('blanc')) WALLCACHE.set('blanc', drawWall('clair', 260, 1, true).toDataURL('image/jpeg', .92)); /* one wallpaper only: bright white with vivid shapes */
   return WALLCACHE.get('blanc');
   const light = D.documentElement.dataset.mode === 'light', ck = key + S.settings.hue + S.settings.cm + light;
   if (!WALLCACHE.has(ck)) WALLCACHE.set(ck, drawWall(key, S.settings.hue, S.settings.cm, light).toDataURL('image/jpeg', .9));
@@ -5452,12 +5480,12 @@ const PGG = {
       if (!gl) return false;
       const VS = `attribute vec2 a;uniform vec4 uQ;uniform vec2 uSize;void main(){vec2 p=uQ.xy+(a*.5+.5)*uQ.zw;vec2 c=p/uSize*2.-1.;gl_Position=vec4(c.x,-c.y,0.,1.);}`;
       const FS = `precision highp float;
-uniform sampler2D uB;uniform vec2 uSize,uWin,uOff,uLd;uniform vec4 uRect,uTint;uniform vec3 uRc;uniform float uMode,uDpr,uRad,uBez,uKk,uDs,uBev,uRim;
+uniform sampler2D uB;uniform vec2 uSize,uWin,uOff,uLd;uniform vec4 uRect,uTint;uniform vec3 uRc;uniform float uSh,uMode,uDpr,uRad,uBez,uKk,uDs,uBev,uRim;
 float sdr(vec2 p){vec2 c=uRect.xy+uRect.zw*.5;vec2 q=abs(p-c)-(uRect.zw*.5-vec2(uRad));return min(max(q.x,q.y),0.)+length(max(q,0.))-uRad;}
 vec3 bg(vec2 p){return texture2D(uB,clamp((p+uOff)/uWin,0.,1.)).rgb;}
 void main(){vec2 px=vec2(gl_FragCoord.x,uSize.y*uDpr-gl_FragCoord.y)/uDpr;
 if(uMode<.5){gl_FragColor=vec4(bg(px),1.);return;}
-if(uMode<1.5){float ds=sdr(px-vec2(0.,5.));gl_FragColor=vec4(0.,0.,0.,.30*(1.-smoothstep(-2.,16.,ds)));return;}
+if(uMode<1.5){float ds=sdr(px-vec2(0.,5.));gl_FragColor=vec4(0.,0.,0.,uSh*(1.-smoothstep(-2.,16.,ds)));return;}
 float d=sdr(px);float aa=clamp(.5-d*uDpr,0.,1.);if(aa<=0.){gl_FragColor=vec4(0.);return;}
 float depth=-d;vec3 col;
 if(depth<uBez){vec2 n=vec2(sdr(px+vec2(.5,0.))-d,sdr(px+vec2(0.,.5))-d);n/=max(length(n),1e-4);float m=depth<=0.?1.:pow(1.-depth/uBez,2.4);vec2 dd=n*m*uKk;
@@ -5469,7 +5497,7 @@ gl_FragColor=vec4(clamp(col,0.,1.)*aa,aa);}`;
       const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(pr); if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) return false;
       gl.useProgram(pr); const bf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
       const al = gl.getAttribLocation(pr, 'a'); gl.enableVertexAttribArray(al); gl.vertexAttribPointer(al, 2, gl.FLOAT, false, 0, 0);
-      ['uB', 'uQ', 'uSize', 'uWin', 'uOff', 'uLd', 'uRect', 'uTint', 'uRc', 'uMode', 'uDpr', 'uRad', 'uBez', 'uKk', 'uDs', 'uBev', 'uRim'].forEach(k => PGG.U[k] = gl.getUniformLocation(pr, k));
+      ['uSh', 'uB', 'uQ', 'uSize', 'uWin', 'uOff', 'uLd', 'uRect', 'uTint', 'uRc', 'uMode', 'uDpr', 'uRad', 'uBez', 'uKk', 'uDs', 'uBev', 'uRim'].forEach(k => PGG.U[k] = gl.getUniformLocation(pr, k));
       const t = gl.createTexture(); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, t);
       [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]].forEach(([a, b]) => gl.texParameteri(gl.TEXTURE_2D, a, b));
       gl.uniform1i(PGG.U.uB, 0); gl.enable(gl.BLEND);
@@ -5480,12 +5508,13 @@ gl_FragColor=vec4(clamp(col,0.,1.)*aa,aa);}`;
   },
   /* the backdrop: graphite shapes, a little calmer so the text stays readable, sized to the window */
   wall(win) {
-    const w = Math.round(win.clientWidth || W), hh = Math.round(win.clientHeight || 844), k = w + 'x' + hh; if (PGG.WK === k) return; PGG.WK = k; PGG.WW = w; PGG.WH = hh;
-    const s = Math.min(2, window.devicePixelRatio || 1), c = mkCanvas(Math.round(w * s), Math.round(hh * s)), x = c.getContext('2d'), wl = drawWall('anthracite', 260, 0, false);
+    const w = Math.round(win.clientWidth || W), hh = Math.round(win.clientHeight || 844), k = w + 'x' + hh + PGG.light(); if (PGG.WK === k) return; PGG.WK = k; PGG.WW = w; PGG.WH = hh;
+    const s = Math.min(2, window.devicePixelRatio || 1), c = mkCanvas(Math.round(w * s), Math.round(hh * s)), x = c.getContext('2d'), lt = PGG.light(), wl = drawWall(lt ? 'clair' : 'anthracite', 260, lt ? 1 : 0, lt);
     const sc = Math.max(c.width / wl.width, c.height / wl.height); x.drawImage(wl, (c.width - wl.width * sc) / 2, (c.height - wl.height * sc) / 2, wl.width * sc, wl.height * sc);
-    x.fillStyle = 'rgba(24,24,27,.38)'; x.fillRect(0, 0, c.width, c.height);
+    x.fillStyle = lt ? 'rgba(255,255,255,.28)' : 'rgba(24,24,27,.38)'; x.fillRect(0, 0, c.width, c.height);
     const gl = PGG.gl; gl.activeTexture(gl.TEXTURE0); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
   },
+  light() { return D.documentElement.dataset.mode === 'light'; },
   hostOf(el) { return el.closest('.page, .tabpane'); },
   add(host) { if (!host || PGG.hosts.has(host)) return; PGG.hosts.add(host); host.classList.add('pgg-host'); host._pggc = h('canvas', { class: 'pgg-c', 'aria-hidden': 'true', width: 0, height: 0 }); host.prepend(host._pggc); },
   kick(ms = 450, host) { if (host) PGG.focus = host; PGG.hot = Math.max(PGG.hot, performance.now() + ms); if (!PGG.raf) PGG.raf = requestAnimationFrame(PGG.frame); },
@@ -5520,18 +5549,18 @@ gl_FragColor=vec4(clamp(col,0.,1.)*aa,aa);}`;
     const { w, hh, hr, s, list, key } = k; if (w < 4 || hh < 4) return; host._pggk = key;
     const dpr = Math.min(2, window.devicePixelRatio || 1), cw = Math.round(w * dpr), ch = Math.round(hh * dpr), gl = PGG.gl, U = PGG.U, cv = PGG.cv;
     if (cv.width !== cw || cv.height !== ch) { cv.width = cw; cv.height = ch; }
-    const wr = win.getBoundingClientRect(), look = LGX.plateLook(true, {});
+    const lt = PGG.light(), wr = win.getBoundingClientRect(), look = LGX.plateLook(!lt, {});
     gl.viewport(0, 0, cw, ch);
     gl.uniform2f(U.uSize, w, hh); gl.uniform2f(U.uWin, PGG.WW, PGG.WH); gl.uniform2f(U.uOff, (hr.left - wr.left) / s, (hr.top - wr.top) / s);
     gl.uniform2f(U.uLd, look.lx == null ? -.5 : look.lx, look.ly == null ? -.85 : look.ly); gl.uniform1f(U.uDpr, dpr);
-    gl.uniform1f(U.uDs, look.disp); gl.uniform1f(U.uBev, look.bevel); gl.uniform1f(U.uRim, look.rim);
+    gl.uniform1f(U.uSh, lt ? .16 : .30); gl.uniform1f(U.uDs, look.disp); gl.uniform1f(U.uBev, look.bevel); gl.uniform1f(U.uRim, look.rim);
     const tint = (t, c) => { gl.uniform4f(U.uTint, t[0] / 255, t[1] / 255, t[2] / 255, t[3]); gl.uniform3f(U.uRc, c[0] / 255, c[1] / 255, c[2] / 255); }, T0 = look.tint, C0 = [look.rc, look.rc, look.rc]; let blue = false; tint(T0, C0);
     gl.blendFunc(gl.ONE, gl.ZERO); gl.uniform1f(U.uMode, 0); gl.uniform4f(U.uQ, 0, 0, w, hh); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     gl.blendFunc(gl.ZERO, gl.ONE_MINUS_SRC_ALPHA); gl.uniform1f(U.uMode, 1);
     for (const [x, y, ew, eh, R] of list) { gl.uniform4f(U.uRect, x, y, ew, eh); gl.uniform1f(U.uRad, R); gl.uniform4f(U.uQ, x - 18, y - 14, ew + 36, eh + 40); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); }
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); gl.uniform1f(U.uMode, 2);
     for (const [x, y, ew, eh, R, me] of list) {
-      if (me !== blue) { blue = me; if (me) tint(PGL.BLUE, PGL.BLUE_RC); else tint(T0, C0); } /* our own messages: glass with a blue tint and blue glints */
+      if (me !== blue) { blue = me; if (me) tint(lt ? PGL.BLUE_L : PGL.BLUE, PGL.BLUE_RC); else tint(T0, C0); } /* our own messages: glass with a blue tint and blue glints */
       gl.uniform4f(U.uRect, x, y, ew, eh); gl.uniform1f(U.uRad, R); gl.uniform1f(U.uBez, Math.max(3, Math.min(LGX.cfg.bezel, R * .9, Math.min(ew, eh) * .4)));
       gl.uniform1f(U.uKk, -.5 * look.refr * (Math.min(ew, eh) < 70 ? .7 : 1)); gl.uniform4f(U.uQ, x - 1, y - 1, ew + 2, eh + 2); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
@@ -5550,17 +5579,17 @@ gl_FragColor=vec4(clamp(col,0.,1.)*aa,aa);}`;
 const PGL = {
   T: 0, tile: null, url: '', src: null, io: null,
   SEL: '.list > .li, .group > .li, .vmc, .dial-k .key, .pad:has(> .tf), .seg, .ct-ai, .bub.them, .bub.me, .cmp-box, .typing',
-  BLUE: [0, 122, 255, .42], BLUE_RC: [150, 200, 255],
+  BLUE: [0, 122, 255, .42], BLUE_L: [0, 122, 255, .78], BLUE_RC: [150, 200, 255],
   prep() {
     if (PGL.src && PGL.W === W) return;
-    const w = Math.round(W), wall = drawWall('anthracite', 260, 0, false), th = Math.round(w * wall.height / wall.width);
-    const tile = mkCanvas(w, th * 2), x = tile.getContext('2d'); x.drawImage(wall, 0, 0, w, th); x.save(); x.translate(0, th * 2); x.scale(1, -1); x.drawImage(wall, 0, 0, w, th); x.restore(); x.fillStyle = 'rgba(24,24,27,.38)'; x.fillRect(0, 0, w, th * 2); /* calmer shapes: text stays readable on the glass */
+    const w = Math.round(W), lt = D.documentElement.dataset.mode === 'light', wall = drawWall(lt ? 'clair' : 'anthracite', 260, lt ? 1 : 0, lt), th = Math.round(w * wall.height / wall.width);
+    const tile = mkCanvas(w, th * 2), x = tile.getContext('2d'); x.drawImage(wall, 0, 0, w, th); x.save(); x.translate(0, th * 2); x.scale(1, -1); x.drawImage(wall, 0, 0, w, th); x.restore(); x.fillStyle = lt ? 'rgba(255,255,255,.28)' : 'rgba(24,24,27,.38)'; x.fillRect(0, 0, w, th * 2); /* calmer shapes: text stays readable on the glass */
     PGL.W = W; PGL.T = th * 2; PGL.url = tile.toDataURL('image/jpeg', .9);
     const M = 120, sc = mkCanvas(w, PGL.T + 2 * M), y = sc.getContext('2d'); y.drawImage(tile, 0, M); y.drawImage(tile, 0, M - PGL.T); y.drawImage(tile, 0, M + PGL.T);
     PGL.M = M; PGL.src = { data: y.getImageData(0, 0, sc.width, sc.height).data, w: sc.width, h: sc.height, d: 1, W: w, H: sc.height };
   },
   install(win) {
-    win.classList.add('pgl-on', 'dark-scope'); if (PGG.init()) { PGL.gpu = true; return PGG.install(win); }
+    win.classList.add('pgl-on'); if (PGG.init()) { PGL.gpu = true; return PGG.install(win); }
     PGL.prep();
     /* plates are drawn ahead of time (900 px before they scroll in) and a few per frame, so scrolling never stalls */
     if (!PGL.io) PGL.io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) PGL.queue(e.target); else { PGL.q.delete(e.target); PGL.free(e.target); } }), { rootMargin: '900px 0px' });
@@ -5590,7 +5619,7 @@ const PGL = {
     let c = el._pglc; if (!c) { c = el._pglc = h('canvas', { class: 'pgl-c', 'aria-hidden': 'true' }); el.prepend(c); }
     const cw = Math.round(w * dpr), ch = Math.round(hh * dpr); if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; }
     const x = c.getContext('2d'), out = x.createImageData(cw, ch), syo = ((oy % PGL.T) + PGL.T) % PGL.T + PGL.M;
-    LGX.plate(PGL.src, ox, syo, w, hh, dpr, LGX.plateLook(true, { ...(el.classList.contains('me') ? { tint: PGL.BLUE, rc: 200 } : {}), R, bezel: Math.min(LGX.cfg.bezel, R * .9, hh * .4), refr: LGX.cfg.refr * (Math.min(w, hh) < 70 ? .7 : 1) }), out); x.putImageData(out, 0, 0);
+    LGX.plate(PGL.src, ox, syo, w, hh, dpr, LGX.plateLook(D.documentElement.dataset.mode !== 'light', { ...(el.classList.contains('me') ? { tint: D.documentElement.dataset.mode === 'light' ? PGL.BLUE_L : PGL.BLUE, rc: 200 } : {}), R, bezel: Math.min(LGX.cfg.bezel, R * .9, hh * .4), refr: LGX.cfg.refr * (Math.min(w, hh) < 70 ? .7 : 1) }), out); x.putImageData(out, 0, 0);
   },
 };
 /* ---------- Téléphone ---------- */
