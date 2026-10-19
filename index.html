@@ -1702,7 +1702,7 @@ textarea.tf{padding:11px 14px}
 .key:active{border-radius:40px;background:var(--label3)}
 /* app icons: iOS continuous-corner squircle, labels 12 */
 .ico .lb{font-size:12px;font-weight:500;letter-spacing:0}
-.ico:active .bg{clip-path:var(--icon-shape);transform:none;filter:brightness(.7)}
+.ico:active .bg{clip-path:var(--icon-shape)}
 .badge{min-width:22px;height:22px;border-radius:11px;background:var(--ios-red);color:#fff;font-size:14px;font-weight:500;box-shadow:none}
 /* call screen */
 #callui{background:linear-gradient(180deg, #2C2C2E, #000)}
@@ -2098,6 +2098,8 @@ textarea.tf{padding:11px 14px}
 .pgl-on .rec-b.pgl-f{--gt:255 59 48 .74;width:84px;height:84px;background:transparent!important;box-shadow:0 10px 26px rgb(255 59 48 / .32)!important;isolation:isolate;position:relative}
 .pgl-on .rec-b i{position:relative;z-index:1;width:26px;height:26px;border-radius:13px;background:#fff;box-shadow:0 1px 4px rgb(0 0 0 / .18)}
 .pgl-on .rec-b.on i{width:24px;height:24px;border-radius:7px}
+/* drops are pressed by SQUISH (jelly), not by a CSS scale */
+.pgl-on .key:active,.pgl-on .cx-k:active,.fab:active,.rec-b:active{transform:none}
 </style>
 </head>
 <body>
@@ -3978,6 +3980,32 @@ function closeDrawer(instant) {
   if (instant) { done(); return; }
   pn.style.transition = 'transform .4s var(--e-std)'; pn.style.transform = `translateY(${H}px)`; L.drawer.style.transition = 'opacity .35s'; L.drawer.style.opacity = 0; setTimeout(() => { if (OS.overlay !== 'drawer') done(); }, 380);
 }
+/* ---------- Pressing a drop of glass ----------
+   App icons, round buttons (+, record, the round button of the bottom bars, trash…) and keys are drops of water:
+   under the finger they flatten and spread a little, and on release they wobble back like jelly. */
+const SQUISH = {
+  sel: '.ico, .fab, .rec-b, .lgx-dot, .cx-k, .dial-k .key, .callbtn',
+  held: new Set(),
+  target(t) { const e = t && t.closest && t.closest(SQUISH.sel); if (!e) return null; if (e.classList.contains('ico')) return e.querySelector('.bg') || e; return e; },
+  base(el) { if (el._sqBase == null) { const t = getComputedStyle(el).transform; el._sqBase = t && t !== 'none' ? t + ' ' : ''; } return el._sqBase; },
+  press(el) {
+    if (!el.animate) return; el._sqBase = null; const b = SQUISH.base(el);
+    if (el._sqA) el._sqA.cancel(); if (el._sqR) el._sqR.cancel();
+    el._sqA = el.animate([{ transform: b + 'scale(1,1)' }, { transform: b + 'scale(1.08,.88)' }], { duration: 160, easing: 'cubic-bezier(.3,.8,.4,1)', fill: 'forwards' });
+    SQUISH.held.add(el);
+  },
+  release(el) {
+    SQUISH.held.delete(el); if (!el.animate) return; const b = SQUISH.base(el);
+    el._sqR = el.animate([{ transform: b + 'scale(1.08,.88)' }, { transform: b + 'scale(.94,1.07)', offset: .32 }, { transform: b + 'scale(1.03,.97)', offset: .62 }, { transform: b + 'scale(.99,1.01)', offset: .84 }, { transform: b + 'scale(1,1)' }], { duration: 560, easing: 'ease-out' });
+    if (el._sqA) { el._sqA.cancel(); el._sqA = null; }
+    el._sqR.onfinish = () => { el._sqR = null; el._sqBase = null; };
+  },
+  init() {
+    SCR.addEventListener('pointerdown', e => { const el = SQUISH.target(e.target); if (el) SQUISH.press(el); }, { capture: true, passive: true });
+    const up = () => { [...SQUISH.held].forEach(el => SQUISH.release(el)); };
+    addEventListener('pointerup', up, { capture: true, passive: true }); addEventListener('pointercancel', up, { capture: true, passive: true });
+  },
+};
 function setupHome() {
   buildDrawer();
   /* Long press on a widget or an app (home or dock) lifts it; then slide to move it anywhere.
@@ -4008,7 +4036,7 @@ function setupHome() {
       lift(st, false); if (st.long && st.mode !== 'move') { OS.dragIcon = false; if (OS.homeDirty) { OS.homeDirty = false; renderHome(); } }
       if (st.mode === 'search') { L.home.style.transition = ''; L.home.style.transform = ''; L.home.style.opacity = ''; if (st.dy > 70 || st.vy > .4) openSearch(); }
     },
-    tap(st) { clearTimeout(st.lp); if (st.long) { OS.dragIcon = false; setTimeout(() => { lift(st, false); if (OS.homeDirty) { OS.homeDirty = false; renderHome(); } }, 200); return; } const ico = st.item && st.item.classList.contains('ico') ? st.item : null; if (ico && !OS.edit) { SND.init(); suppressClick(); launch(ico.dataset.app, null); } else if (OS.edit && !st.item) setEdit(false); },
+    tap(st) { clearTimeout(st.lp); if (st.long) { OS.dragIcon = false; setTimeout(() => { lift(st, false); if (OS.homeDirty) { OS.homeDirty = false; renderHome(); } }, 200); return; } const ico = st.item && st.item.classList.contains('ico') ? st.item : null; if (ico && !OS.edit) { SND.init(); suppressClick(); if (OS.tapLaunch) return; OS.tapLaunch = true; setTimeout(() => { OS.tapLaunch = false; launch(ico.dataset.app, null); }, 110); } /* the drop gets squeezed and starts to bounce back before the app opens */ else if (OS.edit && !st.item) setEdit(false); },
     after(st) { clearTimeout(st.lp); },
   });
   const moveStart = st => {
@@ -7131,7 +7159,7 @@ const KB = {
   KB.setup();
   try { const vm = D.querySelector('meta[name=viewport]'); const c = 'width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover'; if (vm) vm.setAttribute('content', c); else D.head.append(h('meta', { name: 'viewport', content: c })); } catch (e) { }
   layout(); await applyTheme(); applyBrightness();
-  setupHome(); setupGestures(); setupSwitcher(); setupBanner(); startDemoNotifs(); buildLock(); renderSbar(); renderHome(); updateGz();
+  setupHome(); SQUISH.init(); setupGestures(); setupSwitcher(); setupBanner(); startDemoNotifs(); buildLock(); renderSbar(); renderHome(); updateGz();
   SCR.style.setProperty('--pvw', W + 'px');
   addEventListener('resize', debounce(() => { layout(); SCR.style.setProperty('--pvw', W + 'px'); }, 120));
 
