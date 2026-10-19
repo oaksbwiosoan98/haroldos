@@ -1235,7 +1235,7 @@ input[type=date].tf,input[type=time].tf{padding-right:10px}
 #shade .grabbar{position:absolute;left:0;right:0;bottom:0;z-index:2}
 .shade-wall{position:absolute;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none;opacity:0}
 .lgov .lgg{background:transparent;position:relative;isolation:isolate;overflow:hidden;box-shadow:var(--ccg-drop)}
-.lgov .lgg>.ccg-c{position:absolute;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none;filter:blur(.6px)}
+.lgov .lgg>.ccg-c{position:absolute;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none}
 .lgov .lgg::after{content:'';position:absolute;inset:0;border-radius:inherit;box-shadow:var(--ccg-rim);pointer-events:none;z-index:3}
 .lgov .slider.big .tk{background:transparent}
 .lgov .slider.big .ac{opacity:.92}
@@ -1410,6 +1410,12 @@ body.full .screen{bottom:calc(env(safe-area-inset-bottom, 0px) + 30px);border-ra
 .side-host .tabpane > .page > .fab{display:none}
 .rm-sheet{display:flex;align-items:center;gap:6px;padding:4px 6px 4px 16px;border-radius:24px;background:var(--s-highest)}
 .rm-sheet .rm-in{flex:1;min-width:0;height:48px;border:0;outline:0;background:none;color:var(--on-s);font:inherit;font-size:max(16px, calc(16px*var(--ts)))}
+/* CC on clear glass: keep labels readable */
+:root:not([data-mode="light"]) #cc .lgg{text-shadow:0 0 6px rgba(0,0,0,.55)}
+:root[data-mode="light"] #cc .lgg:not(.on){text-shadow:0 0 6px rgba(255,255,255,.8)}
+:root[data-mode="light"] #cc .lgg.on{text-shadow:0 0 6px rgba(0,0,0,.25)}
+/* CC sliders: the filled part is tinted glass too (the lens shows through) */
+#cc.lgov .slider.big .ac{background:color-mix(in srgb, var(--primary) 52%, transparent)}
 </style>
 </head>
 <body>
@@ -3484,7 +3490,7 @@ const GOV = {
       LGX.lens(f, s, rl + cx * sc - cx, rt + cy * sc - cy, cfg.refr * sc * (Math.min(w, hh) < 80 ? .75 : 1), 0, 1 / sc, 1.15, out);
       x.putImageData(out, 0, 0);
       if (on && !prim) prim = GOV.color('var(--primary)');
-      x.globalAlpha = on ? (dark ? .8 : .84) : 1; const card = el.classList.contains('ncard'), ta = el.dataset.tint ? +el.dataset.tint : card ? .64 : .6; x.fillStyle = on ? prim : dark ? `rgba(40,40,46,${ta})` : `rgba(250,250,252,${ta - .02})`; x.fillRect(0, 0, f.w, f.h); x.globalAlpha = 1;
+      /* clear glass: light tint (cards/banners keep more for reading) */ x.globalAlpha = on ? (dark ? .5 : .55) : 1; const card = el.classList.contains('ncard'), ta = el.dataset.tint ? +el.dataset.tint : card ? .64 : .16; x.fillStyle = on ? prim : dark ? `rgba(40,40,46,${ta})` : `rgba(250,250,252,${ta - .02})`; x.fillRect(0, 0, f.w, f.h); x.globalAlpha = 1;
       if (jt) { x.fillStyle = dark ? 'rgba(255,255,255,.12)' : 'rgba(0,0,0,.09)'; x.fillRect(Math.round(16 * dpr), 0, f.w - Math.round(32 * dpr), Math.max(1, Math.round(dpr * .75))); }
     });
   },
