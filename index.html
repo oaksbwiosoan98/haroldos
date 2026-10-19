@@ -3786,6 +3786,12 @@ function homeTop() {
     h('button', { class: 'wt-wx', 'aria-label': 'Météo', onclick: () => launch('meteo') }, wx ? [h('div', { class: 'wt-ic' }, I(wx.icon, 'f'), h('span', { class: 'wt-tp tn' }, Math.round(cur.temperature_2m) + '°')), h('div', { class: 'wt-lb' }, wx.label), h('div', { class: 'wt-pl' }, (c.place && c.place.name || '') + (dl ? ' · ' + Math.round(dl.temperature_2m_max[0]) + '° / ' + Math.round(dl.temperature_2m_min[0]) + '°' : ''))]
       : [h('div', { class: 'wt-ic' }, I('partly_cloudy_day'), h('span', { class: 'wt-tp tn' }, '--°')), h('div', { class: 'wt-lb' }, 'Météo')]));
 }
+/* refresh the time / weather widget in place: its glass plate (canvas) is kept, so nothing behind the glass moves */
+function updateHomeTop() {
+  const cur = L.home && $('.wd-top', L.home); if (!cur) return; const nw = homeTop();
+  [...cur.children].forEach(c => { if (c.tagName !== 'CANVAS') c.remove(); }); cur.append(...nw.children);
+  if (S.weather && (!S.weather.cache || now() - S.weather.cache.at > 30 * MIN) && !homeTop.busy && typeof WX !== 'undefined') { homeTop.busy = true; WX.refresh().finally(() => { homeTop.busy = false; }); }
+}
 function renderHome(force) {
   if (!S) return; if (OS.dragIcon && !force) { OS.homeDirty = true; return; } /* never rebuild under a finger */
   const home = L.home; if (!home) return;
@@ -5016,7 +5022,7 @@ let lastMinute = -1;
 function tick() {
   if (!S) return; const n = now(), d = new Date(n), mk = d.getHours() * 60 + d.getMinutes();
   if (mk !== lastMinute) {
-    lastMinute = mk; if ((D.documentElement.dataset.mode === 'light') !== isLightNow()) { applyTheme(); renderHome(); } renderSbar(); renderLock(); $$('.wd-clock').forEach(w => w.replaceWith(WIDGETS.clock())); bus.emit('minute');
+    lastMinute = mk; if ((D.documentElement.dataset.mode === 'light') !== isLightNow()) { applyTheme(); renderHome(); } renderSbar(); renderLock(); updateHomeTop(); $$('.wd-clock').forEach(w => w.replaceWith(WIDGETS.clock())); bus.emit('minute');
     const t = hm(n), dow = d.getDay(), key = dayStart(n) + '-' + t;
     S.alarms.forEach(a => { if (a.on && a.time === t && a.fired !== key && (!a.days.length || a.days.includes(dow))) { a.fired = key; if (!a.days.length) a.on = false; save('alarms'); ring({ title: t, label: a.label || 'Alarme', snooze: () => { S.snooze = { at: now() + 5 * MIN, label: a.label || 'Alarme' }; save('alarms'); } }); } });
   }
@@ -6996,15 +7002,15 @@ const KB = {
 
   const refreshAll = debounce(w => {
     refreshBadges(); renderPill();
-    if (OS.mode !== 'app' || w === 'home') renderHomeSoon();
+    if (w === 'home') renderHomeSoon(); /* other data (messages, notifications…) only touch the badges: the home and its glass stay as they are */
     if (OS.locked) renderLock();
     if (OS.overlay === 'shade' && L.shade.fill) L.shade.fill();
     if (w === 'settings') renderSbar();
   }, 80);
   bus.on('data', refreshAll);
-  bus.on('player', () => { renderPill(); if (OS.mode !== 'app') renderHomeSoon(); if (OS.overlay === 'cc') renderCC(true); });
+  bus.on('player', () => { renderPill(); if (OS.overlay === 'cc') renderCC(true); });
   bus.on('launched', () => { });
-  bus.on('weather', () => { if (OS.mode !== 'app') renderHomeSoon(); });
+  bus.on('weather', () => updateHomeTop());
 
   $('#bPw').onclick = () => { SND.init(); if (OS.booting) return; if (OS.off) wake(); else screenOff(); };
   $('#bVu').onclick = () => volumeStep(1); $('#bVd').onclick = () => volumeStep(-1);
