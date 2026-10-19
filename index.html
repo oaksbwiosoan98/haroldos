@@ -1420,8 +1420,8 @@ body.full .screen{bottom:calc(env(safe-area-inset-bottom, 0px) + 30px);border-ra
 .hpage.free>[data-key]{position:absolute;margin:0}
 .hpage.free>.ico{width:88px}
 .hpage.free>.wd{box-sizing:border-box}
-.hpage.free>.lifted{transform:scale(1.06);transition:transform .25s cubic-bezier(.3,1.6,.5,1);z-index:5}
-.hpage.free>.moving{transform:scale(1.08);z-index:6;transition:none;filter:drop-shadow(0 16px 24px rgba(0,0,0,.35))}
+.hpage>.lifted{transform:scale(1.06);transition:transform .25s cubic-bezier(.3,1.6,.5,1);z-index:5}
+.hpage>.moving{transform:scale(1.08);z-index:6;transition:none;filter:drop-shadow(0 16px 24px rgba(0,0,0,.35))}
 #dock .ico.lifted{transform:scale(1.08);transition:transform .25s cubic-bezier(.3,1.6,.5,1)}
 #dock.droptarget{outline:2px solid color-mix(in srgb, var(--primary) 70%, transparent);outline-offset:3px}
 /* glass plates are rendered in the canvas (tint, bevel, rim): no CSS tint/rim layer on top */
@@ -1435,6 +1435,21 @@ body.full .screen{bottom:calc(env(safe-area-inset-bottom, 0px) + 30px);border-ra
 .lgov .lgg::after{box-shadow:none}
 :root[data-mode="light"] .wd-clock.lgx-home .shape,:root:not([data-mode="light"]) .wd-clock.lgx-home .shape{background:none}
 :root #dock.lgx-home,:root .wd.lgx-home,:root[data-mode="light"] #dock.lgx-home,:root[data-mode="light"] .wd.lgx-home{box-shadow:none}
+/* home: invisible 4×6 grid, fixed time + weather widget on the top 2 rows */
+.hpage.grid6{padding:0}
+.hpage.grid6>.ico{position:absolute;width:88px;margin:0}
+.wd-top{position:absolute;display:grid;grid-template-columns:1.15fr 1fr;align-items:center;padding:0 22px;border-radius:28px}
+.wd-top>button{all:unset;cursor:pointer;display:flex;flex-direction:column;justify-content:center;min-width:0;height:100%}
+.wd-top .wt-tm{font-size:58px;font-weight:750;line-height:1;letter-spacing:-.02em;font-stretch:90%}
+.wd-top .wt-dt{font-size:14px;font-weight:600;color:var(--primary);margin-top:6px}
+.wd-top .wt-wx{align-items:flex-end;text-align:right}
+.wd-top .wt-ic{display:flex;align-items:center;gap:6px}
+.wd-top .wt-ic .ms{font-size:34px;color:var(--primary)}
+.wd-top .wt-tp{font-size:40px;font-weight:700;line-height:1}
+.wd-top .wt-lb{font-size:14px;font-weight:600;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.wd-top .wt-pl{font-size:12.5px;color:var(--on-s-v);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+:root:not([data-mode="light"]) .wd-top{text-shadow:0 0 8px rgba(0,0,0,.45)}
+:root[data-mode="light"] .wd-top{text-shadow:0 0 8px rgba(255,255,255,.7)}
 </style>
 </head>
 <body>
@@ -2886,45 +2901,44 @@ function homeGlass(tries = 0) {
 }
 const dockGlass = () => homeGlass();
 function glassWidget(el) { if (el.classList.contains('wd-clock')) wallGlass(el, el.offsetWidth / 2, $('.shape', el), true); else wallGlass(el, 28); }
-/* Home screen: widgets and app icons are placed freely (long press, then drag them anywhere).
-   Positions live in S.home.free (CSS px inside the page). The first time, the old grid is laid
-   out once, measured, and turned into free positions. */
-const HOME_WIDGETS = () => ['clock', 'agenda', ...(H >= 800 ? ['music', 'reminders'] : [])];
-function homeItem(key) {
-  if (key.startsWith('w:')) { const w = WIDGETS[key.slice(2)]; if (!w) return null; const el = w(); el.dataset.key = key; return el; }
-  const id = key.slice(4); if (!APPS[id]) return null; const el = appIcon(id, { loc: '0:' + (S.home.pages[0] || []).indexOf(id) }); el.dataset.key = key; return el;
+/* Home screen: an invisible grid of 4 columns × 6 rows (the dock is apart). The top 2 rows hold the
+   fixed time + weather widget (not movable); apps live in the 16 cells below. Long press an app
+   to lift it, slide it, and it lands in the nearest cell (swapping with the app already there). */
+const HG = { cols: 4, rows: 6, first: 8 };
+function homeGeom() {
+  const top = 50, bottom = dockTop() - 10, ch = (bottom - top) / HG.rows, cw = (W - 24) / HG.cols;
+  return { top, ch, cw, left: 12, cell: i => ({ x: 12 + (i % 4) * cw, y: top + Math.floor(i / 4) * ch }) };
 }
-function homeKeys() { return [...HOME_WIDGETS().map(w => 'w:' + w), ...(S.home.pages[0] || []).filter(id => APPS[id]).map(id => 'app:' + id)]; }
+function homeCells() {
+  const ids = (S.home.pages[0] || []).filter(id => APPS[id]); let C = S.home.cells || (S.home.cells = {});
+  Object.keys(C).forEach(id => { if (!ids.includes(id)) delete C[id]; });
+  const used = new Set(Object.values(C));
+  ids.forEach(id => { if (C[id] == null || C[id] < HG.first) { for (let i = HG.first; i < HG.cols * HG.rows; i++) if (!used.has(i)) { C[id] = i; used.add(i); break; } } });
+  return C;
+}
 function dockTop() { const d = $('#dock'); return d ? screenRect(d).y : H - 130; }
-function findSpot(w, hh, skip) {
-  const F = S.home.free || {}, boxes = Object.entries(F).filter(([k]) => k !== skip && homeKeys().includes(k)).map(([, b]) => b), top = 58, bottom = dockTop() - 24 - hh, cw = (W - 36) / 4;
-  for (let y = top; y <= bottom; y += 8) for (let c = 0; c < 4; c++) { const x = 18 + c * cw + (cw - w) / 2; if (x < 4 || x + w > W - 4) continue; if (!boxes.some(b => x < b.x + b.w && x + w > b.x && y < b.y + b.h && y + hh > b.y)) return { x: Math.round(x), y: Math.round(y) }; }
-  return { x: 18, y: Math.max(top, bottom) };
+function homeTop() {
+  const d = new Date(now()), c = S.weather && S.weather.cache, cur = c && c.data && c.data.current, dl = c && c.data && c.data.daily;
+  const wx = cur ? wmo(cur.weather_code, cur.is_day) : null;
+  return h('div', { class: 'wd wd-top' },
+    h('button', { class: 'wt-time', 'aria-label': 'Horloge', onclick: () => launch('horloge') }, h('div', { class: 'wt-tm tn' }, hm(now())), h('div', { class: 'wt-dt' }, longDate(d).replace(/^./, x => x.toUpperCase()))),
+    h('button', { class: 'wt-wx', 'aria-label': 'Météo', onclick: () => launch('meteo') }, wx ? [h('div', { class: 'wt-ic' }, I(wx.icon, 'f'), h('span', { class: 'wt-tp tn' }, Math.round(cur.temperature_2m) + '°')), h('div', { class: 'wt-lb' }, wx.label), h('div', { class: 'wt-pl' }, (c.place && c.place.name || '') + (dl ? ' · ' + Math.round(dl.temperature_2m_max[0]) + '° / ' + Math.round(dl.temperature_2m_min[0]) + '°' : ''))]
+      : [h('div', { class: 'wt-ic' }, I('partly_cloudy_day'), h('span', { class: 'wt-tp tn' }, '--°')), h('div', { class: 'wt-lb' }, 'Météo')]));
 }
 function renderHome(force) {
   if (!S) return; if (OS.dragIcon && !force) { OS.homeDirty = true; return; } /* never rebuild under a finger */
   const home = L.home; if (!home) return;
-  OS.page = 0; const ids = S.home.pages[0] || [];
-  const pg = h('div', { class: 'hpage', style: { width: W + 'px' }, 'data-page': 0 });
-  const free = S.home.free;
-  if (free) {
-    pg.classList.add('free'); const todo = [];
-    homeKeys().forEach(k => { const el = homeItem(k); if (!el) return; const b = free[k]; if (b && k === 'w:clock' && b.w < b.h) b.w = b.h; if (b && isFinite(b.x) && isFinite(b.y)) { el.style.left = b.x + 'px'; el.style.top = b.y + 'px'; if (b.w && k.startsWith('w:')) { el.style.width = b.w + 'px'; el.style.height = b.h + 'px'; } } else todo.push([k, el]); pg.append(el); });
-    if (todo.length) requestAnimationFrame(() => { todo.forEach(([k, el]) => { const r = screenRect(el), sp = findSpot(r.w, r.h, k); S.home.free[k] = { x: sp.x, y: sp.y, w: Math.round(r.w), h: Math.round(r.h) }; el.style.left = sp.x + 'px'; el.style.top = sp.y + 'px'; }); save('home'); homeGlass(); });
-  } else {
-    pg.append(h('div', { class: 'wrow' }, homeItem('w:clock'), homeItem('w:agenda')));
-    if (H >= 800) pg.append(h('div', { class: 'wrow' }, homeItem('w:music'), homeItem('w:reminders')));
-    pg.append(h('div', { class: 'hgrid' }, ids.filter(id => APPS[id]).map(id => homeItem('app:' + id))));
-    /* first time: measure the grid and switch to free placement */
-    requestAnimationFrame(() => { if (!pg.isConnected || S.home.free) return; const pr = screenRect(pg), F = {};
-      $$('[data-key]', pg).forEach(el => { const r = screenRect(el); F[el.dataset.key] = { x: Math.round(r.x - pr.x), y: Math.round(r.y - pr.y), w: Math.round(r.w), h: Math.round(r.h) }; });
-      S.home.free = F; save('home'); renderHome(); });
-  }
-  const pagesEl = h('div', { id: 'pages', style: { width: W + 'px' } }, pg);
+  OS.page = 0;
+  const pg = h('div', { class: 'hpage grid6', style: { width: W + 'px' }, 'data-page': 0 });
   const dock = h('div', { id: 'dock' }, S.home.dock.filter(id => APPS[id]).map((id, i) => appIcon(id, { loc: 'dock:' + i })));
   const done = Btn('OK', () => setEdit(false), { kind: 'filled' }); done.id = 'editdone';
-  home.replaceChildren(pagesEl, dock, done); requestAnimationFrame(() => homeGlass());
+  home.replaceChildren(h('div', { id: 'pages', style: { width: W + 'px' } }, pg), dock, done);
+  const g = homeGeom(), C = homeCells();
+  const top = homeTop(); top.style.left = g.left + 'px'; top.style.top = g.top + 6 + 'px'; top.style.width = g.cw * 4 + 'px'; top.style.height = g.ch * 2 - 12 + 'px'; pg.append(top);
+  Object.entries(C).forEach(([id, i]) => { if (i >= HG.cols * HG.rows) return; const el = appIcon(id, { loc: '0:' + i }), c = g.cell(i); el.dataset.key = 'app:' + id; el.style.left = c.x + (g.cw - 88) / 2 + 'px'; el.style.top = c.y + Math.max(0, (g.ch - 86) / 2) + 'px'; pg.append(el); });
+  requestAnimationFrame(() => homeGlass());
   home.classList.toggle('edit', OS.edit);
+  if (!S.weather.cache || now() - S.weather.cache.at > 30 * MIN) { if (!homeTop.busy && typeof WX !== 'undefined') { homeTop.busy = true; WX.refresh().finally(() => { homeTop.busy = false; }); } }
 }
 const renderHomeSoon = debounce(() => { if (!OS.dragIcon) renderHome(); }, 60);
 function setPage() { OS.page = 0; if (OS.overlay === 'drawer') closeDrawer(); }
@@ -3038,7 +3052,7 @@ function setupHome() {
   drag(L.home, {
     start(st, e) {
       if (OS.locked || OS.mode !== 'home' || e.target.closest('#editdone,.rm,.wd button')) { const rm = e.target.closest('.rm'); if (rm && OS.edit) { removeFromHome(rm.dataset.rm); } return false; }
-      st.item = e.target.closest('.hpage.free > [data-key], #dock .ico');
+      st.item = e.target.closest('.hpage > .ico[data-key], #dock .ico');
       if (OS.edit && st.item) { st.ready = true; return; }
       st.lp = setTimeout(() => { st.long = true; buzz(20);
         if (!st.item) { setEdit(true); return; }
@@ -3077,20 +3091,21 @@ function setupHome() {
     const isApp = st.item.classList.contains('ico'), d = $('#dock'); if (d) d.classList.toggle('droptarget', isApp && st.y > dockTop() - 10);
   };
   const moveEnd = st => {
-    OS.dragIcon = false; const el = st.item, key = el.dataset.key, isApp = el.classList.contains('ico'), id = el.dataset.app, dk = S.home.dock, inDock = isApp && st.y > dockTop() - 10;
+    OS.dragIcon = false; const el = st.item, isApp = el.classList.contains('ico'), id = el.dataset.app, dk = S.home.dock, inDock = isApp && st.y > dockTop() - 10;
     const d = $('#dock'); d && d.classList.remove('droptarget'); lift(st, false); suppressClick();
-    const dockIdx = () => clamp(Math.floor(st.x / (W / 4)), 0, 3), F = S.home.free || (S.home.free = {}), page = S.home.pages[0] = S.home.pages[0] || [];
+    const page = S.home.pages[0] = S.home.pages[0] || [], C = homeCells(), g = homeGeom(), dockIdx = () => clamp(Math.floor(st.x / (W / 4)), 0, 3);
+    /* nearest app cell to the finger */
+    const cellAt = () => { const col = clamp(Math.floor((st.x - g.left) / g.cw), 0, 3), row = clamp(Math.floor((st.y - g.top) / g.ch), 2, HG.rows - 1); return row * 4 + col; };
+    const occupant = i => Object.keys(C).find(k => C[k] === i);
     if (st.ghost) { /* from the dock */
       st.ghost.remove(); el.style.opacity = '';
       if (inDock) { const i = dk.indexOf(id), j = Math.min(dockIdx(), dk.length - 1); dk.splice(i, 1); dk.splice(j, 0, id); }
-      else { dk.splice(dk.indexOf(id), 1); page.push(id); const r = screenRect(st.ghost), w = 88, hh = 90; F['app:' + id] = { x: Math.round(clamp(st.r0.x + st.dx - 14, 4, W - w - 4)), y: Math.round(clamp(st.r0.y + st.dy, 50, dockTop() - hh - 10)), w, h: hh }; }
-    } else if (inDock) { /* page app into the dock: insert, or swap with the app under the finger */
-      const j = dockIdx(); page.splice(page.indexOf(id), 1);
+      else { const i = cellAt(), occ = occupant(i), di = dk.indexOf(id); dk.splice(di, 1); page.push(id); C[id] = i; if (occ) { delete C[occ]; page.splice(page.indexOf(occ), 1); dk.splice(di, 0, occ); } }
+    } else if (inDock) { /* app into the dock: insert, or swap with the app under the finger */
+      const j = dockIdx(), from = C[id]; page.splice(page.indexOf(id), 1); delete C[id];
       if (dk.length < 4) dk.splice(Math.min(j, dk.length), 0, id);
-      else { const out = dk[j]; dk[j] = id; page.push(out); const p0 = st.p0 || { x: 18, y: 430 }; F['app:' + out] = { x: Math.round(p0.x), y: Math.round(p0.y), w: F[key] && F[key].w || 88, h: F[key] && F[key].h || 90 }; }
-      delete F[key];
-    } else { const b = F[key] || { w: Math.round(screenRect(el).w), h: Math.round(screenRect(el).h) };
-      F[key] = { ...b, x: Math.round(clamp(st.p0.x + st.dx, 0, W - b.w)), y: Math.round(clamp(st.p0.y + st.dy, 44, dockTop() - b.h - 8)) }; }
+      else { const out = dk[j]; dk[j] = id; page.push(out); C[out] = from; }
+    } else { const i = cellAt(), occ = occupant(i), from = C[id]; if (occ && occ !== id) C[occ] = from; C[id] = i; }
     OS.homeDirty = false; save('home'); renderHome(true);
   };
 }
@@ -5870,6 +5885,7 @@ const KB = {
   bus.on('data', refreshAll);
   bus.on('player', () => { renderPill(); if (OS.mode !== 'app') renderHomeSoon(); if (OS.overlay === 'cc') renderCC(true); });
   bus.on('launched', () => { });
+  bus.on('weather', () => { if (OS.mode !== 'app') renderHomeSoon(); });
 
   $('#bPw').onclick = () => { SND.init(); if (OS.booting) return; if (OS.off) wake(); else screenOff(); };
   $('#bVu').onclick = () => volumeStep(1); $('#bVd').onclick = () => volumeStep(-1);
