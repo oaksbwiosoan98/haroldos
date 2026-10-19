@@ -2094,6 +2094,10 @@ textarea.tf{padding:11px 14px}
 .pgl-on .gt{border-radius:18px!important}
 .pgl-on .gt .gt-img{inset:4px;border-radius:14px}
 .pgl-on .gt:active{opacity:1;transform:scale(.96)}
+/* Dictaphone: the record button is a red glass drop */
+.pgl-on .rec-b.pgl-f{--gt:255 59 48 .74;width:84px;height:84px;background:transparent!important;box-shadow:0 10px 26px rgb(255 59 48 / .32)!important;isolation:isolate;position:relative}
+.pgl-on .rec-b i{position:relative;z-index:1;width:26px;height:26px;border-radius:13px;background:#fff;box-shadow:0 1px 4px rgb(0 0 0 / .18)}
+.pgl-on .rec-b.on i{width:24px;height:24px;border-radius:7px}
 </style>
 </head>
 <body>
@@ -3085,6 +3089,7 @@ const LGX = {
     /* The shape of the plate (edge, refraction offsets, bevel light, rim) only depends on its size and
        look: it is computed once and cached, so each frame only samples the background (fast enough to
        follow scrolling on a phone). */
+    if (src.base) return LGX.plateB(src, ox, oy, w, h, dpr, P, out);
     const o = out.data, W2 = out.width, H2 = out.height, s = src.data, sw = src.w, sh = src.h, sd = src.d;
     const tint = P.tint || [40, 40, 46, .16], tr = tint[0], tg = tint[1], tb = tint[2], ta = tint[3], ia = 1 - ta, rc = P.rc == null ? 235 : P.rc;
     const G = LGX.plateGeo(W2, H2, w, h, dpr, P), A = G.A, K = G.K, F = G.F, mX = sw - 1, mY = sh - 1;
@@ -3099,6 +3104,31 @@ const LGX = {
         X = ((ox + F[f]) * sd) | 0; Y = ((oy + F[f + 1]) * sd) | 0; X = X < 0 ? 0 : X > mX ? mX : X; Y = Y < 0 ? 0 : Y > mY ? mY : Y; r = s[(Y * sw + X) * 4];
         X = ((ox + F[f + 2]) * sd) | 0; Y = ((oy + F[f + 3]) * sd) | 0; X = X < 0 ? 0 : X > mX ? mX : X; Y = Y < 0 ? 0 : Y > mY ? mY : Y; g = s[(Y * sw + X) * 4 + 1];
         X = ((ox + F[f + 4]) * sd) | 0; Y = ((oy + F[f + 5]) * sd) | 0; X = X < 0 ? 0 : X > mX ? mX : X; Y = Y < 0 ? 0 : Y > mY ? mY : Y; b = s[(Y * sw + X) * 4 + 2];
+        const ad = F[f + 6], ra = F[f + 7];
+        r = r * ia + tr * ta + ad; g = g * ia + tg * ta + ad; b = b * ia + tb * ta + ad;
+        if (ra > 0) { const ir = 1 - ra; r = r * ir + rc * ra; g = g * ir + rc * ra; b = b * ir + rc * ra; }
+      }
+      o[p] = r; o[p + 1] = g; o[p + 2] = b; o[p + 3] = al;
+    }
+  },
+  /* same plate, but the content (transparent where empty) is laid over a fixed base layer (the backdrop of the glass apps) */
+  plateB(src, ox, oy, w, h, dpr, P, out) {
+    const o = out.data, W2 = out.width, H2 = out.height, s = src.data, sw = src.w, sh = src.h, sd = src.d, B = src.base, bs = B.data, bw = B.w, bd = B.d, bmX = B.w - 1, bmY = B.h - 1, bx = B.ox, by = B.oy;
+    const tint = P.tint || [40, 40, 46, .16], tr = tint[0], tg = tint[1], tb = tint[2], ta = tint[3], ia = 1 - ta, rc = P.rc == null ? 235 : P.rc;
+    const G = LGX.plateGeo(W2, H2, w, h, dpr, P), A = G.A, K = G.K, F = G.F, mX = sw - 1, mY = sh - 1;
+    const S = (fx, fy, c) => {
+      let X = ((ox + fx) * sd) | 0, Y = ((oy + fy) * sd) | 0; X = X < 0 ? 0 : X > mX ? mX : X; Y = Y < 0 ? 0 : Y > mY ? mY : Y; const q = (Y * sw + X) * 4, a = s[q + 3];
+      if (a === 255) return s[q + c];
+      let X2 = ((ox + fx + bx) * bd) | 0, Y2 = ((oy + fy + by) * bd) | 0; X2 = X2 < 0 ? 0 : X2 > bmX ? bmX : X2; Y2 = Y2 < 0 ? 0 : Y2 > bmY ? bmY : Y2; const v = bs[(Y2 * bw + X2) * 4 + c];
+      return a === 0 ? v : (s[q + c] * a + v * (255 - a)) / 255;
+    };
+    let p = 0;
+    for (let i = 0, n = W2 * H2; i < n; i++, p += 4) {
+      const al = A[i]; if (!al) { o[p + 3] = 0; continue; }
+      const f = i * 8; let r, g, b;
+      if (K[i] === 1) { r = S(F[f], F[f + 1], 0) * ia + tr * ta; g = S(F[f], F[f + 1], 1) * ia + tg * ta; b = S(F[f], F[f + 1], 2) * ia + tb * ta; }
+      else {
+        r = S(F[f], F[f + 1], 0); g = S(F[f + 2], F[f + 3], 1); b = S(F[f + 4], F[f + 5], 2);
         const ad = F[f + 6], ra = F[f + 7];
         r = r * ia + tr * ta + ad; g = g * ia + tg * ta + ad; b = b * ia + tb * ta + ad;
         if (ra > 0) { const ir = 1 - ra; r = r * ir + rc * ra; g = g * ir + rc * ra; b = b * ir + rc * ra; }
@@ -3176,6 +3206,9 @@ const LGX = {
     const Y0 = opt.y0 || 0; /* flat band start (can be above the page: content scrolled out of view) */
     const W = Math.round(pr.width / SC), H = opt.flat ? Math.round(Math.min(pr.height / SC + (opt.maxH ? 1e9 : 0), opt.maxH || 1e9)) : Math.min(4200, Math.max(Math.round(pr.height / SC), sc ? Math.round((sc.getBoundingClientRect().top - pr.top) / SC + sc.scrollHeight) : 0));
     const cv = mkCanvas(Math.round(W * dpr), Math.round(H * dpr)), x = cv.getContext('2d'); x.scale(dpr, dpr);
+    /* glass apps (PGG): the backdrop is fixed and drawn separately, so the content is rastered on transparent */
+    const pgg = !!(opt.pgg && typeof PGG !== 'undefined' && PGG.ok && (page.closest('.pgg-on')));
+    if (pgg) opt = Object.assign({}, opt, { clear: true });
     let bgc = 'rgb(20,22,20)'; for (let e = page; e; e = e.parentElement) { const b = getComputedStyle(e).backgroundColor; if (b && b !== 'transparent' && !/^rgba\(.*,\s*0\)$/.test(b)) { bgc = b; break; } /* rgb(0, 0, 0) is black, not transparent */ }
     if (!opt.clear) { x.fillStyle = bgc; x.fillRect(0, 0, W, H); if (opt.under) try { opt.under(x, W, H); } catch (e) { } }
     const pos = r => { const inSc = sc && r._in; return { l: (r.left - pr.left) / SC, t: (r.top - pr.top) / SC + (inSc ? st : 0) - Y0, w: r.width / SC, h: r.height / SC }; };
@@ -3197,11 +3230,11 @@ const LGX = {
         continue;
       }
       if (el.tagName === 'IMG' || el.tagName === 'CANVAS') {
-        if (!/(^| )(lgx-c|lgx-goo|lgx-bc|ccg-c|ngl-c|ccg-bg|shade-wall|pgl-c)( |$)/.test(el.getAttribute('class') || '')) try { if (el.tagName === 'IMG') { if (el.complete && el.naturalWidth) LGX.fit(x, el, el.naturalWidth, el.naturalHeight, b, cs.objectFit); } else if (el.width && el.height) LGX.fit(x, el, el.width, el.height, b, 'fill'); } catch (e) { }
+        if (!/(^| )(lgx-c|lgx-goo|lgx-bc|ccg-c|ngl-c|ccg-bg|shade-wall|pgl-c|pgg-c)( |$)/.test(el.getAttribute('class') || '')) try { if (el.tagName === 'IMG') { if (el.complete && el.naturalWidth) LGX.fit(x, el, el.naturalWidth, el.naturalHeight, b, cs.objectFit); } else if (el.width && el.height) LGX.fit(x, el, el.width, el.height, b, 'fill'); } catch (e) { }
         continue;
       }
       const bim = cs.backgroundImage; if (bim && bim !== 'none') { const mm = bim.match(/url\("?(.*?)"?\)/); if (mm) { const im = LGX.img(mm[1]); if (im) try { LGX.fit(x, im, im.naturalWidth, im.naturalHeight, b, /contain/.test(cs.backgroundSize) ? 'contain' : /cover/.test(cs.backgroundSize) ? 'cover' : 'fill'); } catch (e) { } } }
-      const bg = cs.backgroundColor, has = bg && !/rgba\(.*,\s*0\)$/.test(bg) && bg !== 'transparent';
+      const bg = cs.backgroundColor, has = bg && !/rgba\(.*,\s*0\)$/.test(bg) && bg !== 'transparent' && !(pgg && el.matches('.page, .tabpane, .lg-page, .tabhost, .scroll, .pgg-host'));
       if (has) {
         x.fillStyle = bg; const cp = cs.clipPath && cs.clipPath !== 'none' ? poly(cs.clipPath, b) : null;
         if (cp) x.fill(cp); else { x.beginPath(); const rr = [cs.borderTopLeftRadius, cs.borderTopRightRadius, cs.borderBottomRightRadius, cs.borderBottomLeftRadius].map(v => Math.min(parseFloat(v) || 0, b.w / 2, b.h / 2)); if (x.roundRect) x.roundRect(b.l, b.t, b.w, b.h, rr); else x.rect(b.l, b.t, b.w, b.h); x.fill(); }
@@ -3216,7 +3249,7 @@ const LGX = {
       }
     }
     x.globalAlpha = 1;
-    return { data: x.getImageData(0, 0, cv.width, cv.height).data, w: cv.width, h: cv.height, d: dpr, W, H, cv };
+    return { data: x.getImageData(0, 0, cv.width, cv.height).data, w: cv.width, h: cv.height, d: dpr, W, H, cv, pgg };
   },
 };
 /* ---------- Liquid drop ----------
@@ -3429,13 +3462,14 @@ function GlassBar(items, active, onchange, { source, side } = {}) {
     if (!pw) return;
     if (!srcPage || !srcPage.isConnected) { srcPage = source && source(); dirty = true; }
     if (imgV !== LGX.imgVer) { imgV = LGX.imgVer; dirty = true; }
-    if (dirty) { dirty = false; if (srcPage) { try { src = LGX.raster(srcPage, dpr); ver++; } catch (e) { src = null; } } }
+    if (dirty) { dirty = false; if (srcPage) { try { src = LGX.raster(srcPage, dpr, { pgg: true }); ver++; } catch (e) { src = null; } } }
     physics();
     if (!src) return;
     const k = pw + '|' + dpr; if (fkey !== k) { fkey = k; fP = LGX.dims(pw, 64, dpr); fD = LGX.dims(64, 64, dpr); ver++; xB = null; }
     const sc = LGX.scroller(srcPage), st = sc ? sc.scrollTop : 0, pgR = srcPage.getBoundingClientRect(), plR = pill.getBoundingClientRect();
     const ox = (plR.left - pgR.left) / SC, oy = (plR.top - pgR.top) / SC + st, dk = dark();
-    const pk = [st, ver, ox.toFixed(1), oy.toFixed(1), dk].join('|');
+    src.base = src.pgg ? PGG.baseFor(srcPage, st) : null;
+    const pk = [st, ver, ox.toFixed(1), oy.toFixed(1), dk, !!src.base, src.base && src.base.ox.toFixed(1), src.base && src.base.oy.toFixed(1)].join('|');
     if (pk !== pKey) {
       pKey = pk;
       if (pc.width !== fP.w || pc.height !== fP.h) { pc.width = fP.w; pc.height = fP.h; pOut = null; } const pctx = pc.getContext('2d'); if (!pOut) pOut = pctx.createImageData(fP.w, fP.h);
@@ -3508,12 +3542,13 @@ function GlassDock(content, { source, side } = {}) {
     if (fr) { let doc = null; try { doc = fr.contentDocument; if (doc && (!doc.body || doc.URL === 'about:blank')) doc = null; } catch (e) { doc = null; }
       el.classList.toggle('lgx-thru', !doc); if (!doc) return; return frameDoc(fr, doc, dpr, c, pw, ph); }
     el.classList.remove('lgx-thru');
-    if (dirty && srcPage) { dirty = false; try { src = LGX.raster(srcPage, dpr); ver++; } catch (e) { src = null; } }
+    if (dirty && srcPage) { dirty = false; try { src = LGX.raster(srcPage, dpr, { pgg: true }); ver++; } catch (e) { src = null; } }
     if (!src) return;
     const k = pw + '|' + ph + '|' + dpr; if (fkey !== k) { fkey = k; f = LGX.dims(pw, ph, dpr); if (dot) fD = LGX.dims(ph, ph, dpr); ver++; }
     const sc = LGX.scroller(srcPage), st = sc ? sc.scrollTop : 0, pgR = srcPage.getBoundingClientRect(), plR = pill.getBoundingClientRect();
     const ox = (plR.left - pgR.left) / SC, oy = (plR.top - pgR.top) / SC + st, dark = D.documentElement.dataset.mode !== 'light' || !!el.closest('.dark-scope');
-    const key = [st, ver, ox.toFixed(1), oy.toFixed(1), dark].join('|'); if (key === last) return; last = key;
+    src.base = src.pgg ? PGG.baseFor(srcPage, st) : null;
+    const key = [st, ver, ox.toFixed(1), oy.toFixed(1), dark, !!src.base, src.base && src.base.ox.toFixed(1), src.base && src.base.oy.toFixed(1)].join('|'); if (key === last) return; last = key;
     if (pc.width !== f.w || pc.height !== f.h) { pc.width = f.w; pc.height = f.h; out = null; } const x = pc.getContext('2d'); if (!out) out = x.createImageData(f.w, f.h);
     const dkm = dark, phh = ph; LGX.plate(src, ox, oy, pw, phh, dpr, LGX.plateLook(dkm, slim(phh)), out); x.putImageData(out, 0, 0);
     if (dot && fD) { const dR = dot.getBoundingClientRect(), dx = (dR.left - pgR.left) / SC, dy = (dR.top - pgR.top) / SC + st; if (dc.width !== fD.w) { dc.width = fD.w; dc.height = fD.h; dOut = null; } const dctx = dc.getContext('2d'); if (!dOut) dOut = dctx.createImageData(fD.w, fD.h); LGX.plate(src, dx, dy, ph, ph, dpr, LGX.plateLook(dark, { R: ph / 2 }), dOut); dctx.putImageData(dOut, 0, 0); }
@@ -5552,10 +5587,17 @@ gl_FragColor=vec4(clamp(col,0.,1.)*aa,aa);}`;
     const s = Math.min(2, window.devicePixelRatio || 1), c = mkCanvas(Math.round(w * s), Math.round(hh * s)), x = c.getContext('2d'), lt = PGG.light(), wl = drawWall(lt ? 'clair' : 'anthracite', 260, lt ? 1 : 0, lt);
     const sc = Math.max(c.width / wl.width, c.height / wl.height); x.drawImage(wl, (c.width - wl.width * sc) / 2, (c.height - wl.height * sc) / 2, wl.width * sc, wl.height * sc);
     x.fillStyle = lt ? 'rgba(255,255,255,.28)' : 'rgba(24,24,27,.38)'; x.fillRect(0, 0, c.width, c.height);
+    PGG.wallImg = { data: x.getImageData(0, 0, c.width, c.height).data, w: c.width, h: c.height, d: s };
     const gl = PGG.gl; gl.activeTexture(gl.TEXTURE0); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
   },
   light() { return D.documentElement.dataset.mode === 'light'; },
   hostOf(el) { return el.closest('.page, .tabpane'); },
+  /* the fixed backdrop under a page, for the glass bars: they bend the backdrop + the content scrolling over it */
+  baseFor(page, st) {
+    if (!PGG.ok || !page || !page.isConnected) return null; const win = page.closest('.win'); if (!win) return null; PGG.wall(win); if (!PGG.wallImg) return null;
+    const wr = win.getBoundingClientRect(), pr = page.getBoundingClientRect();
+    return Object.assign({ ox: (pr.left - wr.left) / SC, oy: (pr.top - wr.top) / SC - st }, PGG.wallImg);
+  },
   /* colour of a tinted plate: --gt in the CSS ("r g b a"), or the element's own inline background (event / note colours) */
   tintOf(el) {
     const v = getComputedStyle(el).getPropertyValue('--gt').trim(); if (v) { const n = v.split(/[\s,]+/).map(Number); if (n.length >= 4 && n.every(x => !isNaN(x))) return n; }
@@ -5641,25 +5683,33 @@ const FLT = {
     FLT.src = { data: x.getImageData(0, 0, c.width, c.height).data, w: c.width, h: c.height, d, W: w, H: hh }; FLT.els.forEach(e => e._fk = ''); return FLT.src;
   },
   install(win) {
-    const sweep = () => { $$('.fab', win).forEach(el => { if (el._flt || el.closest('.sheet, .dlg, .menu, .dark-scope')) return; el._flt = true; el.classList.add('pgl-f'); el._fc = h('canvas', { class: 'pgl-c', 'aria-hidden': 'true', width: 0, height: 0 }); el.prepend(el._fc); FLT.els.add(el); }); FLT.kick(); };
+    const sweep = () => { $$('.fab, .rec-b', win).forEach(el => { if (el._flt || el.closest('.sheet, .dlg, .menu, .dark-scope')) return; el._flt = true; el.classList.add('pgl-f'); el._fc = h('canvas', { class: 'pgl-c', 'aria-hidden': 'true', width: 0, height: 0 }); el.prepend(el._fc); FLT.els.add(el); }); FLT.kick(); };
     new MutationObserver(debounce(sweep, 40)).observe(win, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
     addEventListener('resize', () => FLT.kick(600)); sweep();
   },
-  hot: 0,
+  hot: 0, tx: 0, ty: 0, qx: 0, qy: 0,
   kick(ms = 500) { FLT.hot = Math.max(FLT.hot, performance.now() + ms); if (!FLT.raf) FLT.raf = requestAnimationFrame(FLT.frame); },
   frame() {
-    FLT.raf = 0;
+    FLT.raf = 0; let drop = false;
+    for (const el of FLT.els) if (el.classList.contains('rec-b') && el.isConnected && el.offsetParent && !el.closest('.win.hidden')) drop = true;
+    if (drop) { /* the record drop leans a tiny bit with the phone, like the app icons */
+      try { TILT.init(); } catch (e) { }
+      FLT.tx += (Math.max(-1.2, Math.min(1.2, (typeof TILT !== 'undefined' && TILT.x) || 0)) - FLT.tx) * .12; FLT.ty += (Math.max(-1.2, Math.min(1.2, (typeof TILT !== 'undefined' && TILT.y) || 0)) - FLT.ty) * .12;
+      const qx = Math.round(FLT.tx * 10) / 10, qy = Math.round(FLT.ty * 10) / 10; if (Math.abs(qx - FLT.qx) >= .1 || Math.abs(qy - FLT.qy) >= .1) { FLT.qx = qx; FLT.qy = qy; }
+    }
     for (const el of FLT.els) { if (!el.isConnected) { FLT.els.delete(el); continue; } if (el.offsetParent && !el.closest('.win.hidden')) try { FLT.render(el); } catch (e) { } }
-    if (performance.now() < FLT.hot) FLT.raf = requestAnimationFrame(FLT.frame);
+    if (drop || performance.now() < FLT.hot) FLT.raf = requestAnimationFrame(FLT.frame);
   },
   render(el) {
     const win = el.closest('.win'); if (!win) return; const src = FLT.source(win);
     const w = el.offsetWidth, hh = el.offsetHeight; if (w < 4 || hh < 4) return;
     const r = el.getBoundingClientRect(), wr = win.getBoundingClientRect(), s = wr.width / (win.clientWidth || 1) || 1, x = (r.left - wr.left) / s, y = (r.top - wr.top) / s;
-    const dpr = Math.min(2, window.devicePixelRatio || 1), k = [w, hh, x.toFixed(1), y.toFixed(1), dpr, FLT.key].join('|'); if (k === el._fk) return; el._fk = k;
+    const isDrop = el.classList.contains('rec-b'), dpr = Math.min(2, window.devicePixelRatio || 1), k = [w, hh, x.toFixed(1), y.toFixed(1), dpr, FLT.key, isDrop ? FLT.qx + ',' + FLT.qy : ''].join('|'); if (k === el._fk) return; el._fk = k;
+    if (el._pggT === undefined) el._pggT = PGG.tintOf(el);
     const c = el._fc; if (c.parentNode !== el) el.prepend(c); const cw = Math.round(w * dpr), ch = Math.round(hh * dpr); if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; }
     const R = Math.min(parseFloat(getComputedStyle(el).borderTopLeftRadius) || hh / 2, hh / 2, w / 2), cx = c.getContext('2d'), out = cx.createImageData(cw, ch);
-    LGX.plate(src, x, y, w, hh, dpr, LGX.plateLook(D.documentElement.dataset.mode !== 'light', { R, bezel: Math.min(LGX.cfg.bezel, R * .9), refr: LGX.cfg.refr * .8 }), out); cx.putImageData(out, 0, 0);
+    const T = el._pggT;
+    LGX.plate(src, x, y, w, hh, dpr, LGX.plateLook(D.documentElement.dataset.mode !== 'light', Object.assign({ R, bezel: Math.min(LGX.cfg.bezel, R * .9), refr: LGX.cfg.refr * .8 }, T ? { tint: T, rc: 255 } : {}, isDrop ? { blob: { x: FLT.qx, y: FLT.qy } } : {})), out); cx.putImageData(out, 0, 0);
   },
 };
 const PGL = {
