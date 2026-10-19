@@ -2363,19 +2363,21 @@ const LGX = {
   /* Rasterise a Harold OS page (backgrounds, photos, canvases, avatar shapes, icons, text) into content coordinates. */
   raster(page, dpr, opt = {}) {
     const pr = page.getBoundingClientRect(), sc = opt.flat ? null : LGX.scroller(page), st = sc ? sc.scrollTop : 0;
-    const W = Math.round(pr.width / SC), H = opt.flat ? Math.round(pr.height / SC) : Math.min(4200, Math.max(Math.round(pr.height / SC), sc ? Math.round((sc.getBoundingClientRect().top - pr.top) / SC + sc.scrollHeight) : 0));
+    const Y0 = opt.y0 || 0; /* flat band start (can be above the page: content scrolled out of view) */
+    const W = Math.round(pr.width / SC), H = opt.flat ? Math.round(Math.min(pr.height / SC + (opt.maxH ? 1e9 : 0), opt.maxH || 1e9)) : Math.min(4200, Math.max(Math.round(pr.height / SC), sc ? Math.round((sc.getBoundingClientRect().top - pr.top) / SC + sc.scrollHeight) : 0));
     const cv = mkCanvas(Math.round(W * dpr), Math.round(H * dpr)), x = cv.getContext('2d'); x.scale(dpr, dpr);
     let bgc = 'rgb(20,22,20)'; for (let e = page; e; e = e.parentElement) { const b = getComputedStyle(e).backgroundColor; if (b && b !== 'transparent' && !/,\s*0\)$/.test(b)) { bgc = b; break; } }
-    x.fillStyle = bgc; x.fillRect(0, 0, W, H); if (opt.under) try { opt.under(x, W, H); } catch (e) { }
-    const pos = r => { const inSc = sc && r._in; return { l: (r.left - pr.left) / SC, t: (r.top - pr.top) / SC + (inSc ? st : 0), w: r.width / SC, h: r.height / SC }; };
+    if (!opt.clear) { x.fillStyle = bgc; x.fillRect(0, 0, W, H); if (opt.under) try { opt.under(x, W, H); } catch (e) { } }
+    const pos = r => { const inSc = sc && r._in; return { l: (r.left - pr.left) / SC, t: (r.top - pr.top) / SC + (inSc ? st : 0) - Y0, w: r.width / SC, h: r.height / SC }; };
     const rectOf = el => { const r = el.getBoundingClientRect(); r._in = sc && sc.contains(el); return pos(r); };
     const opac = el => { let o = 1; for (let e = el; e && e !== page.parentElement; e = e.parentElement) o *= parseFloat(getComputedStyle(e).opacity) || 0; return o; };
     const poly = (cp, b) => { const m = cp.match(/polygon\((.*)\)/); if (!m) return null; const p = new Path2D(); m[1].split(',').forEach((pt, i) => { const [a, c] = pt.trim().split(/\s+/).map(v => parseFloat(v) / (/%/.test(v) ? 100 : 1)); const X = b.l + a * b.w, Y = b.t + c * b.h; i ? p.lineTo(X, Y) : p.moveTo(X, Y); }); p.closePath(); return p; };
-    const els = page.querySelectorAll('*');
+    const els = (opt.only || page).querySelectorAll('*');
     for (const el of els) {
+      if (opt.skip && opt.skip.contains(el)) continue;
+      const b = rectOf(el); if (b.w < 1 || b.h < 1 || b.t > H || b.t + b.h < 0) continue; /* outside the band: skipped before any style lookup */
       if (el.closest('.fab,.lgbar,.lgx,.lgpop,.scrim,svg') && el.tagName !== 'svg') continue;
       const cs = getComputedStyle(el); if (cs.display === 'none' || cs.visibility === 'hidden') continue;
-      const b = rectOf(el); if (b.w < 1 || b.h < 1 || b.t > H || b.t + b.h < 0) continue;
       const a = opac(el); if (a <= 0) continue; x.globalAlpha = a;
       if (el.tagName === 'svg') {
         const col = cs.color; x.save(); x.translate(b.l, b.t); x.scale(b.w / 24, b.h / 24); x.fillStyle = col;
@@ -2383,8 +2385,8 @@ const LGX = {
         el.querySelectorAll('circle').forEach(c => { x.beginPath(); x.arc(+c.getAttribute('cx'), +c.getAttribute('cy'), +c.getAttribute('r'), 0, 7); x.fill(); });
         x.restore(); continue;
       }
-      if (el.tagName === 'IFRAME') { /* a website opened through the proxy: its visible part, so glass over it (banners…) bends the site */
-        try { const d2 = el.contentDocument; if (d2 && d2.body && d2.URL !== 'about:blank') { const w2 = d2.defaultView, sy2 = w2.scrollY || 0, rd = LGX.rasterDoc(d2, sy2, sy2 + (w2.innerHeight || b.h), 1); x.drawImage(rd.cv, b.l, b.t, b.w, b.h); } } catch (e) { }
+      if (el.tagName === 'IFRAME') { if (opt.noFrame) continue; /* a website opened through the proxy: its visible part, so glass over it (banners…) bends the site */
+        try { const d2 = el.contentDocument; if (d2 && d2.body && d2.URL !== 'about:blank') { const w2 = d2.defaultView, sy2 = w2.scrollY || 0, rd = LGX.rasterDoc(d2, sy2, sy2 + Math.min(w2.innerHeight || b.h, H - b.t + 2), 1); x.drawImage(rd.cv, b.l, b.t, b.w, rd.H); } } catch (e) { }
         continue;
       }
       if (el.tagName === 'IMG' || el.tagName === 'CANVAS') {
@@ -3921,32 +3923,63 @@ function showBanner(n) {
 function hideBanner() { L.banner.classList.remove('on'); clearTimeout(bannerT); BGL.start(); }
 /* Live banner in Liquid Glass: the screen behind is captured when it arrives and the card bends it while it slides in, is pulled up or leaves. */
 const BGL = {
-  snap: null, until: 0, running: false, sig: '', tT: 0,
-  /* capture what is behind the banner (current app or home, wallpaper, a website shown in the browser) */
-  take() {
-    const t = GOV.target(), dpr = Math.min(2, window.devicePixelRatio || 1), wi = GOV.wallImg();
-    const sn = LGX.raster(t, dpr, { flat: true, under: (x, W, H) => { if (!wi) return; const k = Math.max(W / wi.naturalWidth, H / wi.naturalHeight), w = wi.naturalWidth * k, hh = wi.naturalHeight * k; x.drawImage(wi, (W - w) / 2, (H - hh) / 2, w, hh); } });
-    sn.rect = t.getBoundingClientRect(); BGL.snap = sn; BGL.ver = (BGL.ver || 0) + 1; BGL.tT = performance.now();
+  snap: null, until: 0, running: false, sig: '', tT: 0, L: null, src: null, lastScroll: 0, comp: null,
+  /* The screen behind the banner is kept as two layers: the fixed part (wallpaper, page background, top bar)
+     and the scrolling content (a tall band around what is visible, or the website in the browser).
+     Scrolling only slides the content layer and recomposes (cheap); the layers are drawn again only when the
+     screen really changes (other app, home, scrolled past the band) or once the scrolling stops. */
+  scrollSrc(t) {
+    const fr = t.querySelector && t.querySelector('.br-ext.via-p iframe'); if (fr) return { fr };
+    if (BGL.L && BGL.L.src && BGL.L.src.sc && BGL.L.src.sc.isConnected && t.contains(BGL.L.src.sc)) return BGL.L.src;
+    const sc = LGX.scroller(t); return sc ? { sc } : null;
   },
-  /* cheap fingerprint of the screen behind: which app, where it is, how far it is scrolled */
+  scrollOf(src) { if (!src) return 0; if (src.fr) { try { return src.fr.contentWindow.scrollY || 0; } catch (e) { return 0; } } return src.sc.scrollTop; },
+  take(force) {
+    const t = GOV.target(), dpr = Math.min(2, window.devicePixelRatio || 1), wi = GOV.wallImg();
+    const tr = t.getBoundingClientRect(), br = L.banner.getBoundingClientRect(), maxH = Math.max(120, (Math.max(br.bottom, tr.top + 200 * SC) - tr.top) / SC + 48);
+    const src = BGL.scrollSrc(t), UP = 260, DN = 520;
+    const base = LGX.raster(t, dpr, { flat: true, maxH, skip: src && src.sc ? src.sc : null, noFrame: !!(src && src.fr), under: (x, W, H) => { if (!wi) return; const k = Math.max(W / wi.naturalWidth, H / wi.naturalHeight), w = wi.naturalWidth * k, hh = wi.naturalHeight * k; x.drawImage(wi, (W - w) / 2, (H - hh) / 2, w, hh); } });
+    let lay = null, clip = null;
+    if (src && src.sc) { const r = src.sc.getBoundingClientRect(); clip = [(r.left - tr.left) / SC, (r.top - tr.top) / SC, r.width / SC, r.height / SC]; lay = LGX.raster(t, dpr, { flat: true, clear: true, only: src.sc, y0: -UP, maxH: maxH + UP + DN }).cv; }
+    else if (src && src.fr) { try { const d2 = src.fr.contentDocument; if (d2 && d2.body && d2.URL !== 'about:blank') { const r = src.fr.getBoundingClientRect(), sy = d2.defaultView.scrollY || 0; clip = [(r.left - tr.left) / SC, (r.top - tr.top) / SC, r.width / SC, r.height / SC]; const fy0 = clip[1]; lay = LGX.rasterDoc(d2, Math.max(0, sy - UP), sy + maxH - fy0 + DN, dpr).cv; src.off = sy - Math.max(0, sy - UP); } } catch (e) { lay = null; } }
+    BGL.L = { base, lay, clip, src, s0: BGL.scrollOf(src), UP, DN, dpr, maxH, rect: tr };
+    BGL.tT = performance.now(); BGL.compose(0);
+  },
+  compose(d) {
+    const Ly = BGL.L, b = Ly.base, dpr = Ly.dpr;
+    let c = BGL.comp; if (!c || c.width !== b.w || c.height !== b.h) c = BGL.comp = mkCanvas(b.w, b.h);
+    const x = c.getContext('2d', { willReadFrequently: true }); x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, c.width, c.height); x.drawImage(b.cv, 0, 0);
+    if (Ly.lay && Ly.clip) { const [cx, cy, cw, ch] = Ly.clip; x.save(); x.scale(dpr, dpr); x.beginPath(); x.rect(cx, cy, cw, ch); x.clip();
+      if (Ly.src.fr) x.drawImage(Ly.lay, cx, cy - Ly.src.off - d, cw, Ly.lay.height / dpr); else x.drawImage(Ly.lay, 0, -Ly.UP - d, Ly.lay.width / dpr, Ly.lay.height / dpr); x.restore(); }
+    BGL.snap = { data: x.getImageData(0, 0, c.width, c.height).data, w: c.width, h: c.height, d: dpr, W: b.W, H: b.H, cv: c, rect: Ly.rect };
+    BGL.ver = (BGL.ver || 0) + 1;
+  },
+  /* fingerprint of the screen behind, scrolling apart: which app, where it is */
   sign() {
-    const t = GOV.target(); if (!t) return ''; const r = t.getBoundingClientRect(), sc = LGX.scroller(t); let fy = 0;
-    const fr = t.querySelector && t.querySelector('.br-ext iframe'); if (fr) try { fy = fr.contentWindow.scrollY || 0; } catch (e) { }
-    return [OS.mode, OS.current, OS.locked, r.left.toFixed(0), r.top.toFixed(0), r.width.toFixed(0), sc ? sc.scrollTop : 0, fy, L.wall.style.backgroundImage.length, D.documentElement.dataset.mode].join('|');
+    const t = GOV.target(); if (!t) return ''; const r = t.getBoundingClientRect();
+    return [OS.mode, OS.current, OS.locked, r.left.toFixed(0), r.top.toFixed(0), r.width.toFixed(0), L.wall.style.backgroundImage.length, D.documentElement.dataset.mode, t.querySelector('.br-ext iframe') ? 1 : 0].join('|');
   },
   show(card) {
     try {
-      BGL.take(); BGL.sig = BGL.sign();
+      BGL.L = null; BGL.take(); BGL.sig = BGL.sign();
       L.banner.classList.add('lgov'); card.classList.add('lgg'); card._lgc = h('canvas', { class: 'ccg-c', 'aria-hidden': 'true' }); card.prepend(card._lgc);
     } catch (e) { BGL.snap = null; L.banner.classList.remove('lgov'); }
   },
   start() { BGL.until = performance.now() + 900; if (BGL.running) return; BGL.running = true; requestAnimationFrame(BGL.frame); },
   frame() {
-    const on = L.banner.classList.contains('on');
-    if (!BGL.snap || (!on && performance.now() > BGL.until)) { BGL.running = false; return; }
-    /* the screen behind changed (other app, home, scrolling, animation): capture it again so the glass
-       never keeps the old screen printed in it */
-    const sg = BGL.sign(); if (sg !== BGL.sig && performance.now() - BGL.tT > 90) { BGL.sig = sg; try { BGL.take(); } catch (e) { } }
+    const on = L.banner.classList.contains('on'), tn = performance.now();
+    if (!BGL.snap || (!on && tn > BGL.until)) { BGL.running = false; return; }
+    try {
+      const sg = BGL.sign();
+      if (sg !== BGL.sig) { if (tn - BGL.tT > 110) { BGL.sig = sg; BGL.take(); } }
+      else if (BGL.L) {
+        const Ly = BGL.L, cur = BGL.scrollOf(Ly.src), d = cur - Ly.s0;
+        if (d !== (Ly.d || 0) && tn - (BGL.cT || 0) > 28) { Ly.d = d; BGL.lastScroll = tn; BGL.cT = tn; /* glass follows the scroll at ~30 fps: half the work, still fluid */
+          if (d < -Ly.UP + 20 || d > Ly.DN - 20) { if (tn - BGL.tT > 110) BGL.take(); } else BGL.compose(d); }
+        else if (d !== (Ly.d || 0)) BGL.lastScroll = tn;
+        else if (d !== 0 && tn - BGL.lastScroll > 220 && tn - BGL.tT > 220) BGL.take(); /* scrolling stopped: fresh layers */
+      }
+    } catch (e) { }
     try { GOV.paintIn(L.banner, BGL.snap, BGL.ver); } catch (e) { }
     requestAnimationFrame(BGL.frame);
   },
