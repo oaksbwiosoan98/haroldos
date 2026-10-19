@@ -2001,7 +2001,7 @@ textarea.tf{padding:11px 14px}
 /* app icons on the home screen and in the dock: Liquid Glass plates (see iconGlass) */
 .ico.gl .bg{clip-path:none!important;background:transparent!important;color:#fff;isolation:isolate}
 .ico.gl .bg > .lgx-c{position:absolute;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none;filter:drop-shadow(0 4px 9px rgb(0 0 0 / .35))}
-.ico.gl .bg .ms{filter:drop-shadow(0 1px 2px rgb(0 0 0 / .45))}
+.ico.gl .bg .ms{filter:drop-shadow(0 1px 2px rgb(0 0 0 / .45));transform:translate(var(--dgx, 0px), var(--dgy, 0px));transition:transform .25s ease-out}
 :root[data-mode="light"] .ico.gl .bg{color:#1C1C1E}
 :root[data-mode="light"] .ico.gl .bg .ms{filter:drop-shadow(0 1px 2px rgb(255 255 255 / .6))}
 :root[data-mode="light"] .ico.gl .bg > .lgx-c{filter:drop-shadow(0 4px 9px rgb(20 20 40 / .14))}
@@ -2915,10 +2915,15 @@ const LGX = {
     const R = Math.min(P.R == null ? Math.min(w, h) / 2 : P.R, w / 2, h / 2), bez = Math.max(4, Math.min(P.bezel || 22, R * .95, Math.min(w, h) * .45));
     const kk = -.5 * (P.refr == null ? 70 : P.refr), mag = P.mag || 1, ds = P.disp == null ? .03 : P.disp;
     const lx = P.lx == null ? -.5 : P.lx, ly = P.ly == null ? -.85 : P.ly, rim = P.rim == null ? .5 : P.rim, bev = P.bevel == null ? .16 : P.bevel, ck = !!P.cookie;
-    const key = [W2, H2, w, h, dpr, R, bez, kk, mag, ds, lx, ly, rim, bev, ck].map(v => typeof v === 'number' ? +v.toFixed(3) : v).join('|');
+    const bl = P.blob || null;
+    const key = [W2, H2, w, h, dpr, R, bez, kk, mag, ds, lx, ly, rim, bev, ck, bl ? bl.x : '', bl ? bl.y : ''].map(v => typeof v === 'number' ? +v.toFixed(3) : v).join('|');
     let G = LGX.geos.get(key); if (G) { LGX.geos.delete(key); LGX.geos.set(key, G); return G; }
     const cx = w / 2, cy = h / 2, R0 = Math.min(w, h) / 2, hx = w / 2 - R, hy = h / 2 - R, N = W2 * H2;
-    const sdf = ck ? (x, y) => { const dx = x - cx, dy = y - cy, a = Math.atan2(dy, dx); return (Math.sqrt(dx * dx + dy * dy) - R0 * (1 + .065 * Math.cos(9 * (a + Math.PI / 2))) / 1.065) * .93; }
+    /* "blob": a drop of water lying flat — almost round, slightly irregular, nudged and stretched a little by gravity (bl.x, bl.y) */
+    const bR = Math.min(w, h) / 2 - 2.5, bOx = bl ? bl.x * 1.6 : 0, bOy = bl ? bl.y * 1.6 : 0, bS = bl ? Math.min(.08, Math.hypot(bl.x, bl.y) * .055) : 0, bP = bl ? Math.atan2(bl.y, bl.x) : 0, bC = Math.cos(bP), bSn = Math.sin(bP);
+    const blobSdf = (x, y) => { const dx = x - cx - bOx, dy = y - cy - bOy, u = (dx * bC + dy * bSn) / (1 + bS), v = (-dx * bSn + dy * bC) / (1 - bS * .6), a = Math.atan2(dy, dx);
+      return (Math.sqrt(u * u + v * v) - bR * (1 + .026 * Math.cos(3 * a + .7) + .017 * Math.cos(5 * a + 2.1) + .012 * Math.cos(2 * a + 1.3))) * .95; };
+    const sdf = bl ? blobSdf : ck ? (x, y) => { const dx = x - cx, dy = y - cy, a = Math.atan2(dy, dx); return (Math.sqrt(dx * dx + dy * dy) - R0 * (1 + .065 * Math.cos(9 * (a + Math.PI / 2))) / 1.065) * .93; }
       : (x, y) => { const qx = Math.abs(x - cx) - hx, qy = Math.abs(y - cy) - hy; return Math.min(Math.max(qx, qy), 0) + Math.sqrt(Math.max(qx, 0) ** 2 + Math.max(qy, 0) ** 2) - R; };
     const A = new Uint8Array(N), K = new Uint8Array(N), F = new Float32Array(N * 8);
     for (let j = 0, i = 0; j < H2; j++) {
@@ -3554,23 +3559,38 @@ function veilSrc() {
   WG.vkey = key; WG.vsrc = { data: x.getImageData(0, 0, w.w, w.h).data, w: w.w, h: w.h, d: w.d, W: w.W, H: w.H, cv };
   return WG.vsrc;
 }
-function wallGlass(el, R, target = el, cookie = false, src0 = null) {
+function wallGlass(el, R, target = el, cookie = false, src0 = null, extra = null) {
   if (!el || !el.isConnected) return;
   const src = src0 || wallSrc(), sr = SCR.getBoundingClientRect(), dr = el.getBoundingClientRect(), dw = Math.round(el.offsetWidth), dh = Math.round(el.offsetHeight); if (!dw || !dh) return;
   const c = target.querySelector(':scope > .lgx-c') || h('canvas', { class: 'lgx-c', 'aria-hidden': 'true' }), d = src.d, cw = Math.round(dw * d), ch = Math.round(dh * d);
   if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; }
   const cx = c.getContext('2d'), out = cx.createImageData(cw, ch), sc = dr.width / SC / dw;
-  LGX.plate(src, (dr.left - sr.left) / SC, (dr.top - sr.top) / SC, dw, dh, d, LGX.plateLook(D.documentElement.dataset.mode !== 'light', { R, cookie, mag: 1 / sc }), out); cx.putImageData(out, 0, 0);
+  LGX.plate(src, (dr.left - sr.left) / SC, (dr.top - sr.top) / SC, dw, dh, d, LGX.plateLook(D.documentElement.dataset.mode !== 'light', Object.assign({ R, cookie, mag: 1 / sc }, extra || {})), out); cx.putImageData(out, 0, 0);
   if (c.parentNode !== target) target.prepend(c);
   el.classList.add('lgx-home');
 }
 function homeGlass(tries = 0) {
   if (!GOV.wallImg() && /url\(/.test(L.wall.style.backgroundImage || '') && tries < 25) { setTimeout(() => homeGlass(tries + 1), 200); return; }
-  wallGlass($('#dock'), 34); $$('.wd', L.home).forEach(glassWidget); $$('.hpage > .ico, #dock .ico', L.home).forEach(ic => iconGlass(ic));
+  wallGlass($('#dock'), 34); $$('.wd', L.home).forEach(glassWidget); $$('.hpage > .ico, #dock .ico', L.home).forEach(ic => iconGlass(ic)); IDROP.start();
 }
 /* App icons in Liquid Glass: each icon is a small glass plate (iOS rounded square) bending the wallpaper
    behind it, with its white glyph on top. */
-function iconGlass(ico, src = null) { const sh = ico && $('.sh', ico), bg = sh && $('.bg', sh); if (!bg) return; ico.classList.add('gl'); wallGlass(sh, Math.round(sh.offsetWidth * .25), bg, false, src); }
+function iconGlass(ico, src = null) { const sh = ico && $('.sh', ico), bg = sh && $('.bg', sh); if (!bg) return; ico.classList.add('gl'); wallGlass(sh, sh.offsetWidth / 2, bg, false, src, { blob: { x: IDROP.qx, y: IDROP.qy } }); }
+/* App icons are drops of water lying flat: almost round, a little irregular, and they shift a touch
+   with the phone's tilt (real gravity, much gentler than the tab-bar drops). One shared shape per tilt
+   step, so all icons are redrawn together only when the tilt really changes. */
+const IDROP = { x: 0, y: 0, qx: 0, qy: 0, t: 0, run: false,
+  frame() {
+    if (OS.mode !== 'home' || OS.locked || OS.off || OS.dragIcon) { IDROP.run = false; return; }
+    IDROP.x += (Math.max(-1.2, Math.min(1.2, TILT.x)) - IDROP.x) * .12; IDROP.y += (Math.max(-1.2, Math.min(1.2, TILT.y)) - IDROP.y) * .12;
+    const qx = Math.round(IDROP.x * 10) / 10, qy = Math.round(IDROP.y * 10) / 10, tn = performance.now();
+    if ((qx !== IDROP.qx || qy !== IDROP.qy) && tn - IDROP.t > 45) { IDROP.qx = qx; IDROP.qy = qy; IDROP.t = tn; IDROP.paint(); }
+    requestAnimationFrame(IDROP.frame);
+  },
+  paint() { L.home.style.setProperty('--dgx', (IDROP.qx * 1.6).toFixed(1) + 'px'); L.home.style.setProperty('--dgy', (IDROP.qy * 1.6).toFixed(1) + 'px'); $$('.hpage > .ico.gl, #dock .ico.gl', L.home).forEach(ic => iconGlass(ic)); },
+  start() { if (IDROP.run) return; IDROP.run = true; try { TILT.init(); } catch (e) { } requestAnimationFrame(IDROP.frame); },
+};
+setInterval(() => { if (OS.mode === 'home' && !OS.locked && !OS.off) IDROP.start(); }, 700);
 /* search screen: suggested / found apps are glass icons too (once the screen has slid in) */
 function searchGlass(res) { const go = () => { if (!res.isConnected) return; try { const v = veilSrc(); $$('.sapps .ico', res).forEach(ic => iconGlass(ic, v)); } catch (e) { } }; requestAnimationFrame(go); setTimeout(go, 380); }
 const dockGlass = () => homeGlass();
