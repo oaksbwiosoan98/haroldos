@@ -1575,7 +1575,7 @@ function shapePath2D(g, kind, x, y, w, hgt) { const p = shapePts(kind, 120); g.b
   const r = D.documentElement.style;
   for (const k in SHAPES) r.setProperty('--shape-' + k, shapeClip(k));
 })();
-const ICON_SHAPES = [['cookie9', 'Biscuit'], ['circle', 'Cercle'], ['squircle', 'Carré doux'], ['flower8', 'Fleur'], ['clover4', 'Trèfle'], ['penta', 'Pentagone']];
+const ICON_SHAPES = [['squircle', 'Carré doux'], ['cookie9', 'Biscuit'], ['circle', 'Cercle'], ['flower8', 'Fleur'], ['clover4', 'Trèfle'], ['penta', 'Pentagone']];
 
 /* ---------- Motion: spring easing via CSS linear() ---------- */
 const HAS_LINEAR = (() => { try { return CSS.supports('transition-timing-function', 'linear(0, 1)'); } catch (e) { return false; } })();
@@ -1752,13 +1752,41 @@ const PHOTO = {
 function drawPhoto(kind, seed, W = 720, H = 960) { const c = mkCanvas(W, H), g = c.getContext('2d'), R = rng(seed); (PHOTO[kind] || PHOTO.mountains)(g, W, H, R); grain(g, W, H, R, 7); return c; }
 
 /* ---------- Wallpapers (follow the theme hue) ---------- */
-const WALLS = [['galets', 'Galets'], ['vagues', 'Vagues'], ['jardin', 'Jardin'], ['aube', 'Aube']];
+const WALLS = [['anthracite', 'Anthracite'], ['galets', 'Galets'], ['vagues', 'Vagues'], ['jardin', 'Jardin'], ['aube', 'Aube']];
 function drawWall(kind, hue, cm = 1, light = false) {
   const W = 900, H = 1950, c = mkCanvas(W, H), g = c.getContext('2d'), R = rng(kind + hue);
   const C = x => x * cm * (light ? .85 : 1);
   const oklch = (L, Cc, Hh, a) => oklchRGB(light ? .985 - (L - .13) * .62 : L, Cc, Hh, a);
   vgrad(g, W, H, [[0, oklch(.24, C(.03), hue)], [1, oklch(.13, C(.015), hue)]]);
-  if (kind === 'galets') {
+  if (kind === 'anthracite') {
+    /* near-neutral charcoal with crisp graphite shapes, fine light lines and one sage accent:
+       strong edges everywhere so the Liquid Glass (widget, dock, bars) visibly bends what's under it */
+    const N = (L, a = 1) => oklch(L, .004, hue, a), Lw = a => (light ? 'rgba(0,0,0,' : 'rgba(255,255,255,') + a + ')';
+    vgrad(g, W, H, [[0, N(.23)], [.55, N(.17)], [1, N(.12)]]);
+    const blob = (kind2, x, y, s, rot, L0, L1, acc) => {
+      const sz = W * s; g.save(); g.translate(x * W, y * H); g.rotate(rot);
+      g.shadowColor = light ? 'rgba(0,0,0,.14)' : 'rgba(0,0,0,.45)'; g.shadowBlur = 50; g.shadowOffsetY = 18;
+      shapePath2D(g, kind2, -sz / 2, -sz / 2, sz, sz);
+      const gr = g.createLinearGradient(-sz / 2, -sz / 2, sz / 2, sz / 2);
+      if (acc) { gr.addColorStop(0, oklch(L0, C(.09), hue)); gr.addColorStop(1, oklch(L1, C(.06), hue)); }
+      else { gr.addColorStop(0, N(L0)); gr.addColorStop(1, N(L1)); }
+      g.fillStyle = gr; g.fill(); g.shadowColor = 'transparent';
+      g.lineWidth = 2.5; g.strokeStyle = acc ? oklch(.8, C(.08), hue, .35) : Lw(.10); g.stroke();
+      g.restore();
+    };
+    blob('squircle', .86, .14, .62, .35, .42, .27);
+    blob('cookie9', .08, .31, .58, .2, .38, .24);
+    blob('circle', .72, .47, .34, 0, .62, .42, true);
+    blob('flower8', .22, .66, .66, .5, .37, .23);
+    blob('clover4', .9, .8, .5, .7, .44, .28);
+    blob('squircle', .3, .97, .7, -.25, .40, .25);
+    blob('circle', .55, .9, .16, 0, .7, .5, true);
+    /* fine concentric rings and a ribbon of thin lines: the refraction makes them ripple under glass */
+    g.lineWidth = 3;
+    for (let i = 0; i < 7; i++) { g.strokeStyle = N(.75, .10 - i * .011); g.beginPath(); g.arc(W * .72, H * .47, W * (.2 + i * .045), 0, 7); g.stroke(); }
+    for (let i = 0; i < 9; i++) { g.strokeStyle = Lw(.07 - i * .005); g.beginPath(); g.moveTo(-20, H * (.06 + i * .018)); g.bezierCurveTo(W * .35, H * (.0 + i * .02), W * .6, H * (.2 + i * .016), W + 20, H * (.12 + i * .02)); g.stroke(); }
+    for (let i = 0; i < 9; i++) { g.strokeStyle = Lw(.06 - i * .004); g.beginPath(); g.moveTo(-20, H * (.86 + i * .014)); g.bezierCurveTo(W * .3, H * (.8 + i * .016), W * .7, H * (.98 + i * .01), W + 20, H * (.88 + i * .014)); g.stroke(); }
+  } else if (kind === 'galets') {
     const shapes = ['cookie9', 'flower8', 'circle', 'clover4', 'penta', 'sunny'];
     const spots = [[.1, .12, .62], [.78, .3, .5], [.25, .55, .55], [.85, .72, .62], [.15, .9, .5], [.6, .06, .3]];
     spots.forEach(([x, y, s], i) => { const sz = W * s; g.save(); g.translate(x * W, y * H); g.rotate(R() * 6); g.shadowColor = 'rgba(0,0,0,.35)'; g.shadowBlur = 60; shapePath2D(g, shapes[i % shapes.length], -sz / 2, -sz / 2, sz, sz); g.fillStyle = oklch(.3 + (i % 3) * .07, C(.05 + (i % 2) * .02), hue + (i % 3 === 2 ? 80 : 0)); g.fill(); g.restore(); });
@@ -1996,6 +2024,7 @@ function ensureDefaults(S) {
   { const dl = (S.files || []).find(f => f.id === 'f-dl'); if (dl && dl.name === 'Téléchargements') dl.name = 'Téléchargés'; }
   if (S.notifSeed !== 2) { const keep = (S.notifs || []).filter(x => !['Bienvenue dans Harold OS'].includes(x.title) && !/^(Camille Durand|Wei Zhang|Appel manqué)$/.test(x.title)); S.notifs = [...keep, ...sampleNotifs()]; S.notifSeed = 2; }
   S.settings.mode = S.settings.mode || 'dark';
+  if (!S.settings.anthr) { S.settings.anthr = 1; if (!String(S.settings.wallpaper).startsWith('file:')) S.settings.wallpaper = 'anthracite'; S.settings.iconShape = 'squircle'; } /* new default look, applied once */
   if (!S.weather) S.weather = { mode: 'gps', place: { name: 'Paris', lat: 48.8566, lon: 2.3522 }, cache: null };
   if (!S.map) S.map = { x: (2.3488 + 180) / 360, y: (1 - Math.log(Math.tan(48.8534 * Math.PI / 180) + 1 / Math.cos(48.8534 * Math.PI / 180)) / Math.PI) / 2, z: 12.5, layer: 'plan' };
   if (!S.places) S.places = [
@@ -2129,7 +2158,7 @@ function freshState() {
   ];
   return {
     v: 1,
-    settings: { owner: 'Moi', device: 'Harold Phone', theme: 'sauge', hue: 145, cm: 1, wallpaper: 'galets', iconShape: 'cookie9', ts: 1, pin: '', sounds: true, volume: .7, vibrate: true,
+    settings: { owner: 'Moi', device: 'Harold Phone', theme: 'sauge', hue: 145, cm: 1, wallpaper: 'anthracite', iconShape: 'squircle', ts: 1, pin: '', sounds: true, volume: .7, vibrate: true,
       wifi: true, bt: true, airplane: false, dnd: false, data: true, rotation: true, brightness: 1, autolock: 5, nightLight: false },
     home: { pages: [['calendrier', 'horloge', 'notes', 'calculatrice', 'fichiers', 'rappels', 'musique', 'parametres']], dock: ['telephone', 'navigateur', 'camera', 'galerie'], merged: true, drawer: true },
     notifs, contacts, calls, threads, notes, reminders, events, alarms, files,
