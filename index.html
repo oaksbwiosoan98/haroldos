@@ -2024,6 +2024,38 @@ textarea.tf{padding:11px 14px}
 :root[data-wall="light"] .screen:not([data-ctx="home"]):not([data-ctx="lock"]) #hbar{background:var(--hbar)}
 :root[data-wall="light"] #lock .lwall{filter:brightness(.97)}
 #home.edit .ico .rm{display:none!important}
+
+/* ---------- Téléphone in Liquid Glass (see PGL) ---------- */
+.pgl-on .page,.pgl-on .tabpane,.pgl-on .lg-page{background:#000}
+.pgl-on .scroll,.pgl-on .dial,.pgl-on .composer{position:relative;isolation:isolate}
+.pgl-bg{position:absolute;left:0;top:0;width:100%;z-index:-1;pointer-events:none}
+.pgl-bg > i{display:block;width:100%;background-size:100% 100%;background-repeat:no-repeat}
+.pgl{position:relative;isolation:isolate;background:transparent!important}
+.pgl > .pgl-c{position:absolute;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none}
+.pgl-on .lhead .acts{background:transparent!important;box-shadow:none!important}
+.pgl-on .page.nb-on .lhead .acts{background:rgb(0 0 0 / .55)!important}
+/* rows become separate glass cards */
+.pgl-on .list{display:flex;flex-direction:column;gap:8px;padding:0 12px}
+.pgl-on .list > .li,.pgl-on .group > .li{border-radius:22px!important;padding:10px 14px;min-height:60px}
+.pgl-on .list > .li + .li::before,.pgl-on .group > .li + .li::before{display:none}
+.pgl-on .group{background:transparent;overflow:visible;gap:8px;border-radius:0;margin:0 12px}
+.pgl-on .li:active{background:transparent!important;transform:scale(.98)}
+.pgl-on .li{transition:transform .2s}
+.pgl-on .vml{background:transparent;overflow:visible;gap:10px;margin:0 12px}
+.pgl-on .vmc{border-radius:24px!important;padding:14px 16px}
+.pgl-on .vmc + .vmc::before{display:none}
+.pgl-on .pad:has(> .tf){margin:0 12px 10px!important;padding:0;border-radius:16px}
+.pgl-on .pad > .tf{background:transparent!important;box-shadow:none!important;border-radius:16px}
+.pgl-on .seg{border-radius:14px;padding:3px}
+.pgl-on .seg button{border-radius:11px!important}
+.pgl-on .dial-k .key{border-radius:50%}
+.pgl-on .key:active{transform:scale(.94)}
+.pgl-on .ct-ai{border-radius:18px}
+.pgl-on .bub.them,.pgl-on .bub.them.last{border-radius:20px!important;color:#fff}
+.pgl-on .typing{border-radius:20px}
+.pgl-on .cmp-box{border-radius:20px;box-shadow:none}
+.pgl-on .composer{background:transparent}
+.pgl-on .sect{margin:22px 28px 8px;color:rgb(235 235 245 / .7)}
 </style>
 </head>
 <body>
@@ -2611,6 +2643,62 @@ function sampleNotifs() {
     n('parametres', 'Bienvenue dans Harold OS', 'Tirez depuis le haut à droite pour le centre de contrôle, et glissez vers le haut depuis la barre pour revenir à l\'accueil.', 10 * Hh),
   ];
 }
+
+/* Lots of sample content in Téléphone (contacts, conversations, calls, voicemail) so there is plenty to scroll */
+function morePhoneData(S) {
+  const R = rng('harold-phone-2'), pick = a => a[Math.floor(R() * a.length)], ago = ms => now() - ms;
+  const FIRST = ['Antoine', 'Chloé', 'Lucas', 'Manon', 'Nathan', 'Emma', 'Louis', 'Jade', 'Hugo', 'Alice', 'Gabriel', 'Lina', 'Arthur', 'Rose', 'Jules', 'Anna', 'Raphaël', 'Zoé', 'Paul', 'Léna', 'Adam', 'Inès', 'Victor', 'Camille', 'Maxime', 'Sarah', 'Théo', 'Clara', 'Noah', 'Eva', 'Yanis', 'Margaux', 'Liang', 'Yuki', 'Karim', 'Nora'];
+  const LAST = ['Bernard', 'Dubois', 'Laurent', 'Simon', 'Michel', 'Lefebvre', 'Leroy', 'Fontaine', 'Mercier', 'Blanc', 'Guerin', 'Boyer', 'Faure', 'Andre', 'Giraud', 'Morel', 'Rousseau', 'Clement', 'Gauthier', 'Perrin', 'Robin', 'Masson', 'Henry', 'Nicolas', 'Wang', 'Tanaka', 'Haddad', 'Lambert'];
+  const NOTES = ['Collègue', 'Voisine du 3e', 'Club de yoga', 'Ancien camarade de promo', 'Coiffeur', 'Garage', 'Babysitter', 'Prof de piano', 'Cousin', 'Agence de voyage', ''];
+  const phone = () => '0' + pick(['6', '7']) + ' ' + [0, 0, 0, 0].map(() => String(Math.floor(R() * 100)).padStart(2, '0')).join(' ');
+  const have = new Set(S.contacts.map(c => (c.first + ' ' + c.last).toLowerCase())), added = [];
+  for (let i = 0; added.length < 34 && i < 400; i++) {
+    const f = pick(FIRST), l = pick(LAST), k = (f + ' ' + l).toLowerCase(); if (have.has(k)) continue; have.add(k);
+    const c = { id: 'cx' + (added.length + 1), first: f, last: l, phone: phone(), email: R() < .4 ? (f + '.' + l + '@exemple.fr').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '') : '', hue: AV_HUES[added.length % AV_HUES.length], fav: R() < .08, note: R() < .35 ? pick(NOTES) : '' };
+    added.push(c);
+  }
+  S.contacts.push(...added);
+  const all = S.contacts.filter(c => c.phone);
+  /* conversations */
+  const CONV = [
+    [[0, 'Tu es dispo pour un café cette semaine ?'], [1, 'Jeudi après-midi ça te va ?'], [0, 'Parfait, 15h au Café des Arts ☕']],
+    [[0, 'Merci pour hier soir, c\'était super !'], [1, 'Avec plaisir, à refaire vite 😊']],
+    [[1, 'Tu as le lien de la réunion ?'], [0, 'Je te l\'envoie tout de suite'], [0, 'C\'est dans ta boîte mail'], [1, 'Reçu, merci !']],
+    [[0, 'Le colis est arrivé ?'], [1, 'Oui ce matin, merci beaucoup 🙏']],
+    [[0, 'On part à quelle heure demain ?'], [1, '8h30 devant la gare'], [0, 'Ok je prends les croissants 🥐']],
+    [[1, 'Bon anniversaire !! 🎉🎂'], [0, 'Merci ❤️ tu passes ce soir ?'], [1, 'Bien sûr !']],
+    [[0, 'Tu peux m\'envoyer les photos du week-end ?'], [1, 'Je fais ça ce soir'], [1, 'C\'est envoyé 📸']],
+    [[0, 'Rappel : cours de yoga décalé à 19h'], [1, 'Merci de l\'info !']],
+    [[1, 'Tu as vu le match hier ?'], [0, 'Oui incroyable la fin 😱'], [1, 'J\'en reviens toujours pas']],
+    [[0, 'Je suis en retard de 10 min, désolée !'], [1, 'Pas de souci, je commande en attendant']],
+    [[1, 'Tu me prêtes ta perceuse ce week-end ?'], [0, 'Oui passe la prendre samedi']],
+    [[0, 'Le restaurant a confirmé pour 4 personnes'], [1, 'Top, merci d\'avoir réservé !'], [0, 'Rendez-vous à 20h']],
+    [[1, 'Tu connais un bon dentiste ?'], [0, 'Le cabinet Faure, ils sont très bien'], [1, 'Merci je les appelle']],
+    [[0, 'Bien rentrée ?'], [1, 'Oui, merci pour tout 😘']],
+    [[1, 'On fait un pique-nique dimanche au parc'], [0, 'Avec plaisir, j\'apporte une salade']],
+    [[0, 'Tu as fini le livre ?'], [1, 'Presque, la fin est géniale'], [0, 'Ne me spoile pas 🙈']],
+    [[1, 'Le devis est prêt, je vous l\'envoie ?'], [0, 'Oui merci, par mail svp']],
+    [[0, 'Ça te dit un ciné vendredi ?'], [1, 'Carrément, lequel ?'], [0, 'Le nouveau Miyazaki 🎬']],
+    [[1, 'Je passe vers 18h pour la clé'], [0, 'D\'accord, je serai là']],
+    [[0, 'Bonne chance pour ton entretien demain !'], [1, 'Merci 🤞 je te raconte'], [1, 'C\'était top, ils me rappellent lundi']],
+    [[1, 'Tu as des nouvelles de Léa ?'], [0, 'Oui elle va bien, elle rentre la semaine prochaine']],
+    [[0, 'Je t\'ai laissé un message vocal'], [1, 'Je l\'écoute et je te rappelle']],
+    [[1, 'Ton paquet est chez la gardienne'], [0, 'Super, merci beaucoup !']],
+    [[0, 'Tu peux arroser mes plantes pendant mon absence ?'], [1, 'Pas de problème 🌿'], [0, 'Tu es un ange']],
+  ];
+  const free = all.filter(c => !S.threads.some(t => t.contactId === c.id));
+  CONV.forEach((conv, i) => { const c = free[i % free.length]; if (!c) return; const base = (2 + i * 1.3 + R() * 2) * DAY * (R() < .3 ? .2 : 1);
+    S.threads.push({ id: 'tx' + i, contactId: c.id, unread: i % 7 === 0 ? 1 : 0, msgs: conv.map(([them, text], j) => ({ id: uid(), me: !them, text, time: ago(base - j * (4 + R() * 20) * MIN), read: !them ? ago(base - j * 5 * MIN - MIN) : undefined })) }); });
+  [['Doctolib', 'Rappel : RDV demain 10:00 avec Dr Faure. Pour annuler, répondez STOP.'], ['SNCF', 'Votre train Paris → Lyon de 08:12 est à l\'heure. Voie affichée 20 min avant.'], ['Ameli', 'Votre remboursement de 25,00 € a été effectué.'], ['La Poste', 'Votre lettre recommandée est disponible en bureau de poste.']].forEach(([n, t], i) =>
+    S.threads.push({ id: 'ts' + i, contactId: null, number: n, unread: 0, msgs: [{ id: uid(), me: false, text: t, time: ago((1 + i * 3.5) * DAY) }] }));
+  /* calls */
+  for (let i = 0; i < 70; i++) { const c = pick(all), r = R(), type = r < .22 ? 'missed' : r < .6 ? 'in' : 'out';
+    S.calls.push({ id: uid(), contactId: R() < .9 ? c.id : null, number: c.phone, type, time: ago((.3 + i * .45 + R() * .4) * DAY), dur: type === 'missed' ? 0 : Math.floor(20 + R() * 1400) }); }
+  /* voicemail */
+  const VM = ['Salut, c\'est moi, rappelle-moi quand tu peux, rien d\'urgent. Bisous !', 'Bonjour, je vous appelle pour le rendez-vous de jeudi, merci de me confirmer l\'horaire.', 'Coucou ! Je voulais savoir si tu venais samedi, dis-moi vite.', 'Bonjour, votre commande est prête, vous pouvez passer la récupérer en magasin.', 'Hello, petit message pour te dire que j\'ai trouvé tes clés, je les garde au chaud.', 'Bonjour, ici le garage, votre véhicule est prêt. Bonne journée.', 'Je suis devant chez toi, je t\'attends en bas !', 'Bonjour, c\'est l\'agence, on a une nouvelle proposition de visite pour vous.', 'Rappelle-moi pour les billets de concert, il en reste deux.', 'Bonjour, c\'est le secrétariat de l\'école, merci de nous rappeler.', 'Joyeux anniversaire !! On pense fort à toi, gros bisous.', 'Bonsoir, simple rappel pour la réunion de copropriété mardi à 19h.'];
+  S.voicemails = S.voicemails || [];
+  VM.forEach((text, i) => { const c = pick(all); S.voicemails.push({ id: 'vx' + i, contactId: R() < .85 ? c.id : null, number: c.phone, time: ago((.5 + i * 1.7 + R()) * DAY), dur: Math.round(5 + R() * 25), song: pick(['note', 'melodie']), heard: i > 2, text }); });
+}
 function ensureDefaults(S) {
   { const dl = (S.files || []).find(f => f.id === 'f-dl'); if (dl && dl.name === 'Téléchargements') dl.name = 'Téléchargés'; }
   if (S.notifSeed !== 2) { const keep = (S.notifs || []).filter(x => !['Bienvenue dans Harold OS'].includes(x.title) && !/^(Camille Durand|Wei Zhang|Appel manqué)$/.test(x.title)); S.notifs = [...keep, ...sampleNotifs()]; S.notifSeed = 2; }
@@ -2648,6 +2736,7 @@ function ensureDefaults(S) {
     const m = S.notes.find(x => x.title === 'Réunion lundi' && x.remind == null); if (m) { const t = new Date(); t.setDate(t.getDate() + ((8 - t.getDay()) % 7 || 7)); t.setHours(9, 0, 0, 0); m.remind = t.getTime(); } }
   if (!S.home.drawer) { S.home.drawer = true; S.home.pages = [(S.home.pages[0] || []).filter(id => APPS[id] && !APPS[id].alias).slice(0, 12)]; }
   if (!S.seenApps) S.seenApps = Object.keys(APPS).filter(id => !['meteo', 'plans', 'navigateur', 'mail'].includes(id));
+  if (!S.morePhone1) { S.morePhone1 = 1; try { morePhoneData(S); } catch (e) { } }
   return S;
 }
 function freshState() {
@@ -3044,7 +3133,7 @@ const LGX = {
         continue;
       }
       if (el.tagName === 'IMG' || el.tagName === 'CANVAS') {
-        if (!/(^| )(lgx-c|lgx-goo|lgx-bc|ccg-c|ngl-c|ccg-bg|shade-wall)( |$)/.test(el.getAttribute('class') || '')) try { if (el.tagName === 'IMG') { if (el.complete && el.naturalWidth) LGX.fit(x, el, el.naturalWidth, el.naturalHeight, b, cs.objectFit); } else if (el.width && el.height) LGX.fit(x, el, el.width, el.height, b, 'fill'); } catch (e) { }
+        if (!/(^| )(lgx-c|lgx-goo|lgx-bc|ccg-c|ngl-c|ccg-bg|shade-wall|pgl-c)( |$)/.test(el.getAttribute('class') || '')) try { if (el.tagName === 'IMG') { if (el.complete && el.naturalWidth) LGX.fit(x, el, el.naturalWidth, el.naturalHeight, b, cs.objectFit); } else if (el.width && el.height) LGX.fit(x, el, el.width, el.height, b, 'fill'); } catch (e) { }
         continue;
       }
       const bim = cs.backgroundImage; if (bim && bim !== 'none') { const mm = bim.match(/url\("?(.*?)"?\)/); if (mm) { const im = LGX.img(mm[1]); if (im) try { LGX.fit(x, im, im.naturalWidth, im.naturalHeight, b, /contain/.test(cs.backgroundSize) ? 'contain' : /cover/.test(cs.backgroundSize) ? 'cover' : 'fill'); } catch (e) { } } }
@@ -5340,6 +5429,56 @@ function threadName(t) { const c = contactOf(t.contactId); return c ? fullName(c
 const sortedContacts = () => [...S.contacts].sort((a, b) => fullName(a).localeCompare(fullName(b), 'fr'));
 function openThreadWith(contactId) { let t = S.threads.find(x => x.contactId === contactId); if (!t) { t = { id: uid(), contactId, unread: 0, msgs: [] }; S.threads.push(t); save('threads'); } launch('messages', { thread: t.id }); }
 
+
+/* ---------- Téléphone in Liquid Glass ----------
+   The whole app sits on a dark backdrop (the graphite shapes, drawn once and tiled down the content),
+   and every card (rows, contacts, voicemails, keys, fields, received bubbles…) is a glass plate that
+   bends that backdrop. The backdrop scrolls with the content, so each plate is rendered once (only
+   when it comes into view) and scrolling costs nothing; the bottom bar's glass bends all of it live. */
+const PGL = {
+  T: 0, tile: null, url: '', src: null, io: null,
+  SEL: '.list > .li, .group > .li, .vmc, .dial-k .key, .pad:has(> .tf), .seg, .ct-ai, .bub.them, .cmp-box, .typing',
+  prep() {
+    if (PGL.src && PGL.W === W) return;
+    const w = Math.round(W), wall = drawWall('anthracite', 260, 0, false), th = Math.round(w * wall.height / wall.width);
+    const tile = mkCanvas(w, th * 2), x = tile.getContext('2d'); x.drawImage(wall, 0, 0, w, th); x.save(); x.translate(0, th * 2); x.scale(1, -1); x.drawImage(wall, 0, 0, w, th); x.restore();
+    PGL.W = W; PGL.T = th * 2; PGL.url = tile.toDataURL('image/jpeg', .9);
+    const M = 120, sc = mkCanvas(w, PGL.T + 2 * M), y = sc.getContext('2d'); y.drawImage(tile, 0, M); y.drawImage(tile, 0, M - PGL.T); y.drawImage(tile, 0, M + PGL.T);
+    PGL.M = M; PGL.src = { data: y.getImageData(0, 0, sc.width, sc.height).data, w: sc.width, h: sc.height, d: 1, W: w, H: sc.height };
+  },
+  install(win) {
+    PGL.prep(); win.classList.add('pgl-on');
+    /* plates are drawn ahead of time (900 px before they scroll in) and a few per frame, so scrolling never stalls */
+    if (!PGL.io) PGL.io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) PGL.queue(e.target); else { PGL.q.delete(e.target); PGL.free(e.target); } }), { rootMargin: '900px 0px' });
+    const sweep = debounce(() => PGL.sweep(win), 50); new MutationObserver(sweep).observe(win, { childList: true, subtree: true }); PGL.sweep(win);
+    win.addEventListener('scroll', e => { const sc = e.target; if (sc.classList && sc.classList.contains('scroll')) PGL.fit(sc); }, { capture: true, passive: true });
+  },
+  scrollOf(el) { return el.closest('.scroll, .dial, .composer'); },
+  fit(sc) { /* backdrop layer = as many tiles as the content is tall */
+    let bg = sc.querySelector(':scope > .pgl-bg'); if (!bg) { bg = h('div', { class: 'pgl-bg', 'aria-hidden': 'true' }); sc.prepend(bg); }
+    const need = Math.max(1, Math.ceil(sc.scrollHeight / PGL.T)); if (bg.childElementCount !== need) { bg.replaceChildren(...Array.from({ length: need }, () => h('i', { style: { height: PGL.T + 'px', backgroundImage: `url("${PGL.url}")` } }))); }
+  },
+  sweep(win) {
+    $$('.scroll, .dial, .composer', win).forEach(sc => PGL.fit(sc));
+    /* class + canvas are added here, in the same burst as the list rendering, so the bars' glass re-reads the page only once */
+    $$(PGL.SEL, win).forEach(el => { if (el._pgl) { if (el._pglOn) PGL.render(el); return; } el._pgl = true; el.classList.add('pgl'); el._pglc = h('canvas', { class: 'pgl-c', 'aria-hidden': 'true', width: 0, height: 0 }); el.prepend(el._pglc); PGL.io.observe(el); });
+  },
+  q: new Set(), qRun: false,
+  queue(el) { el._pglOn = true; PGL.q.add(el); if (PGL.qRun) return; PGL.qRun = true; requestAnimationFrame(PGL.drain); },
+  drain() { const t0 = performance.now(); for (const el of PGL.q) { PGL.q.delete(el); PGL.render(el); if (performance.now() - t0 > 5) break; } if (PGL.q.size) requestAnimationFrame(PGL.drain); else PGL.qRun = false; },
+  free(el) { el._pglOn = false; const c = el._pglc; if (c) { c.width = 0; c.height = 0; el._pglk = ''; } },
+  render(el) {
+    el._pglOn = true; const sc = PGL.scrollOf(el); if (!el.isConnected || !el.offsetParent) return;
+    const w = el.offsetWidth, hh = el.offsetHeight; if (w < 4 || hh < 4) return;
+    let ox = 0, oy = 0; for (let e = el; e && e !== sc && e.offsetParent; e = e.offsetParent) { ox += e.offsetLeft; oy += e.offsetTop; if (sc && e.offsetParent === sc.offsetParent) { oy -= sc.offsetTop; ox -= sc.offsetLeft; break; } }
+    const cs = getComputedStyle(el), R = Math.min(parseFloat(cs.borderTopLeftRadius) || 12, hh / 2, w / 2), dpr = Math.min(1.5, window.devicePixelRatio || 1);
+    const key = [w, hh, ox, oy, R, dpr].join('|'); if (key === el._pglk) return; el._pglk = key;
+    let c = el._pglc; if (!c) { c = el._pglc = h('canvas', { class: 'pgl-c', 'aria-hidden': 'true' }); el.prepend(c); }
+    const cw = Math.round(w * dpr), ch = Math.round(hh * dpr); if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; }
+    const x = c.getContext('2d'), out = x.createImageData(cw, ch), syo = ((oy % PGL.T) + PGL.T) % PGL.T + PGL.M;
+    LGX.plate(PGL.src, ox, syo, w, hh, dpr, LGX.plateLook(true, { R, bezel: Math.min(LGX.cfg.bezel, R * .9, hh * .4), refr: LGX.cfg.refr * (Math.min(w, hh) < 70 ? .7 : 1) }), out); x.putImageData(out, 0, 0);
+  },
+};
 /* ---------- Téléphone ---------- */
 app('telephone', {
   name: 'Téléphone', icon: 'call', tone: 'p', cat: 'Communication', keys: 'appel appeler clavier messages sms contacts repondeur messagerie',
@@ -5351,6 +5490,7 @@ app('telephone', {
     const TABS = [{ id: 'messages', icon: 'chat', label: 'Messages' }, { id: 'recents', icon: 'schedule', label: 'Récents' }, { id: 'contacts', icon: 'person', label: 'Contacts' }, { id: 'pad', icon: 'dialpad', label: 'Clavier' }, { id: 'voicemail', icon: 'voicemail', label: 'Vocaux' }];
     const nav = GlassBar(TABS.filter(t => t.id !== 'pad'), tab, t => show(t), { side: TABS.find(t => t.id === 'pad'), source: () => { const p = host.querySelector('.tabpane:not(.off)'); return p && (p.firstElementChild || p); } });
     ctx.root(h('div', { class: 'page lg-page' }, host, nav));
+    PGL.install(ctx.win); ctx.onShow(() => { if (PGL.W !== W) { PGL.prep(); $$('.pgl', ctx.win).forEach(el => { el._pglk = ''; if (el._pglOn) PGL.render(el); }); } });
     let lastY = 0;
     ctx.onShow(() => nav.refresh());
     TABS.forEach(t => { panes[t.id] = h('div', { class: 'tabpane off' }); host.append(panes[t.id]); });
