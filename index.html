@@ -2006,6 +2006,23 @@ textarea.tf{padding:11px 14px}
 :root[data-mode="light"] .ico.gl .bg .ms{filter:drop-shadow(0 1px 2px rgb(255 255 255 / .6))}
 :root[data-mode="light"] .ico.gl .bg > .lgx-c{filter:drop-shadow(0 4px 9px rgb(20 20 40 / .14))}
 .shint{font-size:13px;color:var(--label2);margin:-2px 32px 10px}
+
+/* white wallpaper: what sits directly on it (home, lock screen, status bar there) turns dark */
+:root[data-wall="light"] #wall{background-color:#F4F4F5}
+:root[data-wall="light"] #home .ico .lb{color:#1C1C1E;text-shadow:0 0 6px rgb(255 255 255 / .7)}
+:root[data-wall="light"] #home .ico.gl .bg{color:#1C1C1E}
+:root[data-wall="light"] #home .ico.gl .bg .ms{filter:drop-shadow(0 1px 2px rgb(255 255 255 / .6))}
+:root[data-wall="light"] #home .ico.gl .bg > .lgx-c{filter:drop-shadow(0 4px 9px rgb(20 20 40 / .14))}
+:root[data-wall="light"] #home .wd-top{color:#1C1C1E;text-shadow:0 0 8px rgb(255 255 255 / .7)}
+:root[data-wall="light"] #home .wd-top .wt-dt,:root[data-wall="light"] #home .wd-top .wt-ic .ms{color:#1C1C1E}
+:root[data-wall="light"] #home .wd-top .wt-pl{color:rgb(60 60 67 / .6)}
+:root[data-wall="light"] .screen:is([data-ctx="home"],[data-ctx="lock"]) #sbar{color:#000}
+:root[data-wall="light"] .screen:is([data-ctx="home"],[data-ctx="lock"]) .ios-bat{box-shadow:inset 0 0 0 1px rgb(0 0 0 / .35)}
+:root[data-wall="light"] #lock .ldate,:root[data-wall="light"] #lock .lclock,:root[data-wall="light"] #lock .lclock span,:root[data-wall="light"] #lock .lhint{color:#1C1C1E}
+:root[data-wall="light"] #lock .lbtns button{background:rgb(0 0 0 / .08);color:#1C1C1E}
+:root[data-wall="light"] #hbar{background:rgb(0 0 0 / .55)}
+:root[data-wall="light"] .screen:not([data-ctx="home"]):not([data-ctx="lock"]) #hbar{background:var(--hbar)}
+:root[data-wall="light"] #lock .lwall{filter:brightness(.97)}
 </style>
 </head>
 <body>
@@ -2309,8 +2326,8 @@ const PHOTO = {
 function drawPhoto(kind, seed, W = 720, H = 960) { const c = mkCanvas(W, H), g = c.getContext('2d'), R = rng(seed); (PHOTO[kind] || PHOTO.mountains)(g, W, H, R); grain(g, W, H, R, 7); return c; }
 
 /* ---------- Wallpapers (follow the theme hue) ---------- */
-/* the one and only wallpaper: matte black with one soft light reflection that makes the glass icons shine (drawn once, very light) */
-const WALLS = [['noir', 'Noir mat']];
+/* the one and only wallpaper: white with a few soft grey shapes (the 'anthracite' composition drawn light) */
+const WALLS = [['blanc', 'Blanc']];
 const WALLS_OLD = [['anthracite', 'Anthracite'], ['galets', 'Galets'], ['vagues', 'Vagues'], ['jardin', 'Jardin'], ['aube', 'Aube']];
 function drawWall(kind, hue, cm = 1, light = false) {
   const W = 900, H = 1950, c = mkCanvas(W, H), g = c.getContext('2d'), R = rng(kind + hue);
@@ -3498,15 +3515,15 @@ function layout() {
 const WALLCACHE = new Map();
 async function applyTheme() {
   const s = S.settings, r = D.documentElement.style;
-  D.documentElement.dataset.mode = isLightNow() ? 'light' : 'dark'; D.documentElement.dataset.theme = s.theme || '';
+  D.documentElement.dataset.mode = isLightNow() ? 'light' : 'dark'; D.documentElement.dataset.wall = 'light'; D.documentElement.dataset.theme = s.theme || '';
   r.setProperty('--h', s.hue); r.setProperty('--cm', s.cm); r.setProperty('--ts', s.ts);
   r.setProperty('--icon-shape', `var(--shape-${s.iconShape})`);
   $('meta[name=theme-color]') && $('meta[name=theme-color]').setAttribute('content', isLightNow() ? oklch(.975, .006 * s.cm, s.hue) : (D.documentElement.dataset.theme === 'anthracite' ? '#000000' : oklch(.165, .009 * s.cm, s.hue)));
   await applyWall();
 }
 async function wallURL(key = S.settings.wallpaper) {
-  if (!WALLCACHE.has('noir')) WALLCACHE.set('noir', drawWall('noir', 0, 0, false).toDataURL('image/jpeg', .92)); /* one wallpaper only */
-  return WALLCACHE.get('noir');
+  if (!WALLCACHE.has('blanc')) WALLCACHE.set('blanc', drawWall('anthracite', 260, 0, true).toDataURL('image/jpeg', .92)); /* one wallpaper only: white with shapes */
+  return WALLCACHE.get('blanc');
   const light = D.documentElement.dataset.mode === 'light', ck = key + S.settings.hue + S.settings.cm + light;
   if (!WALLCACHE.has(ck)) WALLCACHE.set(ck, drawWall(key, S.settings.hue, S.settings.cm, light).toDataURL('image/jpeg', .9));
   return WALLCACHE.get(ck);
@@ -3591,7 +3608,7 @@ function wallGlass(el, R, target = el, cookie = false, src0 = null, extra = null
   const c = target.querySelector(':scope > .lgx-c') || h('canvas', { class: 'lgx-c', 'aria-hidden': 'true' }), d = src.d, cw = Math.round(dw * d), ch = Math.round(dh * d);
   if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; }
   const cx = c.getContext('2d'), out = cx.createImageData(cw, ch), sc = dr.width / SC / dw;
-  LGX.plate(src, (dr.left - sr.left) / SC, (dr.top - sr.top) / SC, dw, dh, d, LGX.plateLook(D.documentElement.dataset.mode !== 'light', Object.assign({ R, cookie, mag: 1 / sc }, extra || {})), out); cx.putImageData(out, 0, 0);
+  LGX.plate(src, (dr.left - sr.left) / SC, (dr.top - sr.top) / SC, dw, dh, d, LGX.plateLook(D.documentElement.dataset.mode !== 'light' && D.documentElement.dataset.wall !== 'light', Object.assign({ R, cookie, mag: 1 / sc }, extra || {})), out); cx.putImageData(out, 0, 0);
   if (c.parentNode !== target) target.prepend(c);
   el.classList.add('lgx-home');
 }
@@ -3617,6 +3634,7 @@ const IDROP = { x: 0, y: 0, qx: 0, qy: 0, t: 0, run: false,
   start() { if (IDROP.run) return; IDROP.run = true; try { TILT.init(); } catch (e) { } requestAnimationFrame(IDROP.frame); },
 };
 setInterval(() => { if (OS.mode === 'home' && !OS.locked && !OS.off) IDROP.start(); }, 700);
+setInterval(() => { const c = OS.locked ? 'lock' : OS.overlay ? 'ovl' : OS.mode === 'app' ? 'app' : 'home'; if (SCR.dataset.ctx !== c) SCR.dataset.ctx = c; }, 120);
 /* search screen: suggested / found apps are glass icons too (once the screen has slid in) */
 function searchGlass(res) { const go = () => { if (!res.isConnected) return; try { const v = veilSrc(); $$('.sapps .ico', res).forEach(ic => iconGlass(ic, v)); } catch (e) { } }; requestAnimationFrame(go); setTimeout(go, 380); }
 const dockGlass = () => homeGlass();
