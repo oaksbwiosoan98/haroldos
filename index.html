@@ -2672,6 +2672,8 @@ function GlassDock(content, { source, side } = {}) {
   const dot = side ? h('div', { class: 'lgx-dot' }, dc, h('div', { class: 'lgx-tint' }), side) : null;
   const el = h('nav', { class: 'lgx lgdock' + (side ? ' has-side' : ''), 'aria-label': 'Barre d\'outils' }, pill, dot);
   let fD = null, dOut = null;
+  /* a thin bar (the browser's compact address pill) keeps a bevel and a bend in proportion to its height */
+  const slim = hh => ({ R: hh / 2, bezel: Math.min(LGX.cfg.bezel, hh * .34), refr: LGX.cfg.refr * Math.min(1, hh / 60) });
   let imgV = -1, src = null, srcPage = null, dirty = true, ver = 1, f = null, fkey = '', out = null, last = '', mo = null, alive = true;
   const watch = () => { if (mo) mo.disconnect(); srcPage = source && source(); if (!srcPage) return; mo = new MutationObserver(debounce(() => { dirty = true; }, 120)); mo.observe(srcPage.parentElement || srcPage, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class', 'style'] }); dirty = true; };
   const frame = () => {
@@ -2692,7 +2694,7 @@ function GlassDock(content, { source, side } = {}) {
     const ox = (plR.left - pgR.left) / SC, oy = (plR.top - pgR.top) / SC + st, dark = D.documentElement.dataset.mode !== 'light';
     const key = [st, ver, ox.toFixed(1), oy.toFixed(1), dark].join('|'); if (key === last) return; last = key;
     if (pc.width !== f.w || pc.height !== f.h) { pc.width = f.w; pc.height = f.h; out = null; } const x = pc.getContext('2d'); if (!out) out = x.createImageData(f.w, f.h);
-    const dkm = dark, phh = ph; LGX.plate(src, ox, oy, pw, phh, dpr, LGX.plateLook(dkm, { R: phh / 2 }), out); x.putImageData(out, 0, 0);
+    const dkm = dark, phh = ph; LGX.plate(src, ox, oy, pw, phh, dpr, LGX.plateLook(dkm, slim(phh)), out); x.putImageData(out, 0, 0);
     if (dot && fD) { const dR = dot.getBoundingClientRect(), dx = (dR.left - pgR.left) / SC, dy = (dR.top - pgR.top) / SC + st; if (dc.width !== fD.w) { dc.width = fD.w; dc.height = fD.h; dOut = null; } const dctx = dc.getContext('2d'); if (!dOut) dOut = dctx.createImageData(fD.w, fD.h); LGX.plate(src, dx, dy, ph, ph, dpr, LGX.plateLook(dark, { R: ph / 2 }), dOut); dctx.putImageData(dOut, 0, 0); }
   };
   /* proxied website: raster a band around the visible part, re-raster when scrolling leaves it */
@@ -2708,7 +2710,7 @@ function GlassDock(content, { source, side } = {}) {
     const frR = fr.getBoundingClientRect(), plR = pill.getBoundingClientRect(), ox = (plR.left - frR.left) / SC, oy = (plR.top - frR.top) / SC + sy - wsrc.y0;
     const key = ['w', sy, ver, ox.toFixed(1), oy.toFixed(1)].join('|'); if (key === last) return; last = key;
     if (pc.width !== f.w || pc.height !== f.h) { pc.width = f.w; pc.height = f.h; out = null; } const x = pc.getContext('2d'); if (!out) out = x.createImageData(f.w, f.h);
-    LGX.plate(wsrc, ox, oy, pw, ph, dpr, LGX.plateLook(D.documentElement.dataset.mode !== 'light', { R: ph / 2 }), out); x.putImageData(out, 0, 0);
+    LGX.plate(wsrc, ox, oy, pw, ph, dpr, LGX.plateLook(D.documentElement.dataset.mode !== 'light', slim(ph)), out); x.putImageData(out, 0, 0);
   };
   const loop = () => { if (!alive) return; try { frame(); } catch (e) { } requestAnimationFrame(loop); }; requestAnimationFrame(loop);
   new ResizeObserver(() => { dirty = true; }).observe(el);
@@ -5385,14 +5387,43 @@ app('navigateur', {
     const compact = on => { if (dock.classList.contains('compact') === on) return; dock.classList.toggle('compact', on); dock.refresh(); };
     const watchScroll = sc => { let lastY = 0; sc.addEventListener('scroll', () => { const y = sc.scrollTop, d = y - lastY; if (y < 12) compact(false); else if (d > 6) compact(true); else if (d < -6) compact(false); if (Math.abs(d) > 6) lastY = y; }, { passive: true }); };
     /* a real site lives in another origin: its scrolling can't be seen, so touching the page shrinks the bar */
-    window.addEventListener('blur', () => setTimeout(() => { const a = D.activeElement; if (a && a.tagName === 'IFRAME' && view.contains(a)) compact(true); }, 0));
-    /* proxied site: links and searches stay in Harold's browser, scrolling drives the compact bar */
+    window.addEventListener('blur', () => setTimeout(() => { const a = D.activeElement; if (a && a.tagName === 'IFRAME' && view.contains(a) && !view.querySelector('.via-p')) compact(true); }, 0));
+    /* Proxied site. Safari never runs Harold's own listeners inside a frame whose scripts are disabled, so
+       nothing is hooked inside the site: its scroll position is read every frame (scrolling down shrinks the
+       bar, scrolling up brings it back, each time), and its links/search forms are rewritten to go through
+       the proxy so they stay in Harold's browser. */
+    const PX = '/api/p?url=';
+    const fixLinks = doc => {
+      doc.querySelectorAll('a[href]:not([data-hos])').forEach(a => { a.setAttribute('data-hos', '1'); const raw = a.getAttribute('href') || ''; if (raw.startsWith('#') || /^(javascript|mailto|tel):/i.test(raw)) return; const href = a.href; if (!/^https?:/.test(href)) return; a.setAttribute('href', location.origin + PX + encodeURIComponent(href)); a.removeAttribute('target'); });
+      doc.querySelectorAll('form:not([data-hos])').forEach(f => { f.setAttribute('data-hos', '1'); if ((f.getAttribute('method') || 'get').toLowerCase() !== 'get') return; let act; try { act = new URL(f.getAttribute('action') || '', doc.baseURI).href; } catch (e) { return; } f.setAttribute('action', location.origin + '/api/p'); f.removeAttribute('target'); const hi = doc.createElement('input'); hi.type = 'hidden'; hi.name = '__hos_u'; hi.value = act; f.prepend(hi); });
+    };
+    const siteDoc = () => { const fr = view.querySelector('.via-p iframe'); if (!fr) return null; try { const d = fr.contentDocument; return d && d.body && d.URL !== 'about:blank' ? d : null; } catch (e) { return null; } };
+    let sDoc = null, sLast = 0, sT = 0;
+    const poll = () => {
+      if (pg.isConnected) {
+        const doc = siteDoc();
+        if (doc) {
+          const win = doc.defaultView, y = Math.max(win.scrollY || 0, (doc.scrollingElement || doc.documentElement).scrollTop || 0, doc.body.scrollTop || 0);
+          if (doc !== sDoc) { sDoc = doc; sLast = y; sT = 0; }
+          const d = y - sLast;
+          if (y < 12) { compact(false); sLast = y; } else if (d > 8) { compact(true); sLast = y; } else if (d < -8) { compact(false); sLast = y; }
+          const t = performance.now(); if (t - sT > 400) { sT = t; try { fixLinks(doc); } catch (e) { } }
+        }
+      }
+      requestAnimationFrame(poll);
+    };
+    requestAnimationFrame(poll);
+    /* each page the frame loads (first one or a link followed inside it): read its real address */
     const hookSite = fr => {
-      let doc; try { doc = fr.contentDocument; } catch (e) { return; } if (!doc || !doc.body) return; const win = doc.defaultView;
-      try { const mu = doc.querySelector('meta[name="hos-url"]'), fu = new URL((mu && mu.content) || stack[idx]); if (fu.href !== stack[idx] && isExt(fu.href)) { stack[idx] = fu.href; B.last = fu.href; drawBar(); } } catch (e) { }
-      doc.addEventListener('click', e => { const a = e.target.closest && e.target.closest('a[href]'); if (!a) return; const raw = a.getAttribute('href') || ''; if (raw.startsWith('#')) return; const href = a.href; if (!/^https?:/.test(href)) return; e.preventDefault(); go(href); }, true);
-      doc.addEventListener('submit', e => { const f = e.target; if ((f.getAttribute('method') || 'get').toLowerCase() !== 'get') return; e.preventDefault(); try { const url = new URL(f.action || stack[idx]); new FormData(f).forEach((v, k) => url.searchParams.append(k, v)); go(url.href); } catch (er) { } }, true);
-      let lastY = win.scrollY || 0; win.addEventListener('scroll', () => { const y = win.scrollY || 0, d = y - lastY; if (y < 12) compact(false); else if (d > 6) compact(true); else if (d < -6) compact(false); if (Math.abs(d) > 6) lastY = y; }, { passive: true });
+      let doc; try { doc = fr.contentDocument; } catch (e) { return; } if (!doc || !doc.body) return;
+      try { fixLinks(doc); } catch (e) { }
+      try { const mu = doc.querySelector('meta[name="hos-url"]'), fu = new URL((mu && mu.content) || stack[idx]).href;
+        if (fu !== stack[idx] && isExt(fu)) {
+          if (fr._loads) { stack = stack.slice(0, idx + 1); stack.push(fu); idx = stack.length - 1; B.history.unshift({ u: fu, t: titleOf(fu), at: now() }); B.history = B.history.slice(0, 60); }
+          else stack[idx] = fu; /* redirect of the page that was asked for */
+          B.last = fu; save('browser'); drawBar();
+        } } catch (e) { }
+      fr._loads = (fr._loads || 0) + 1; compact(false);
       dock.refresh();
     };
     const expand = () => { compact(false); const a = D.activeElement; if (a && a.tagName === 'IFRAME') try { a.blur(); window.focus(); } catch (e) { } };

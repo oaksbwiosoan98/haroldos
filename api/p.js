@@ -7,7 +7,11 @@ const esc = s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replac
 
 module.exports = async (req, res) => {
   if (req.query.ping) { res.setHeader('content-type', 'application/json'); return res.status(200).send('{"ok":true}'); }
-  const u = String(req.query.url || '');
+  let u = String(req.query.url || '');
+  /* a search form of the site (rewritten by Harold OS): its real address + the fields typed */
+  if (req.query.__hos_u) {
+    try { const t = new URL(String(req.query.__hos_u)); t.search = ''; for (const [k, v] of Object.entries(req.query)) { if (k === '__hos_u') continue; (Array.isArray(v) ? v : [v]).forEach(x => t.searchParams.append(k, String(x))); } u = t.href; } catch (e) { u = ''; }
+  }
   if (!/^https?:\/\//i.test(u)) return res.status(400).send('Adresse invalide');
   let r;
   try {
