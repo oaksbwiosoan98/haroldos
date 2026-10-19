@@ -1375,6 +1375,13 @@ input[type=date].tf,input[type=time].tf{padding-right:10px}
 .lgdock .br-addr{transition:height .32s,font-size .32s,background .25s}
 .lgdock.compact .br-addr{height:34px;font-size:12.5px;background:none;box-shadow:none;padding:0 10px}
 .lgdock.compact .br-addr .ms{font-size:13px}
+/* Browser bar: clear glass (almost no tint), the page shows through */
+.br .lgdock{--lgx-tint:rgba(30,30,36,.10)}
+:root[data-mode="light"] .br .lgdock{--lgx-tint:rgba(250,250,252,.12)}
+.br .lgdock.lgx-thru .lgx-tint{background:rgba(30,30,36,.10)}
+:root[data-mode="light"] .br .lgdock.lgx-thru .lgx-tint{background:rgba(250,250,252,.12)}
+.br .lgdock .br-addr{background:rgba(255,255,255,.06)}
+:root:not([data-mode="light"]) .br .lgdock .br-addr span,:root:not([data-mode="light"]) .br .lgdock .ib .ms{text-shadow:0 0 4px rgba(0,0,0,.55)}
 </style>
 </head>
 <body>
@@ -5124,8 +5131,8 @@ const ACTUS = [
   { t: 'Le vélo en ville a le vent en poupe', c: 'Mobilité', d: 3, p: ['Les nouvelles pistes cyclables ont fait grimper le nombre de trajets à vélo cette année.', 'Les vélos à assistance électrique séduisent particulièrement pour les trajets de plus de cinq kilomètres.', 'Pensez au casque et à un bon éclairage maintenant que les jours raccourcissent.'] },
 ];
 /* Is the Vercel proxy there? (only on the online version) */
-const BR_PROXY = { ok: false };
-try { if ((/^https:/.test(location.protocol) || location.hostname === 'localhost') && !/claude\.ai$|claudeusercontent|anthropic/.test(location.hostname)) fetch('/api/p?ping=1').then(r => r.ok ? r.json() : null).then(j => { BR_PROXY.ok = !!(j && j.ok); }).catch(() => { }); } catch (e) { }
+const BR_PROXY = { ok: false, ready: Promise.resolve(false) };
+try { if ((/^https:/.test(location.protocol) || location.hostname === 'localhost') && !/claude\.ai$|claudeusercontent|anthropic/.test(location.hostname)) BR_PROXY.ready = fetch('/api/p?ping=1').then(r => r.ok ? r.json() : null).then(j => (BR_PROXY.ok = !!(j && j.ok))).catch(() => false); } catch (e) { }
 app('navigateur', {
   name: 'Navigateur', icon: 'public', tone: 'i', cat: 'Web et cartes', keys: 'internet web site recherche',
   create(ctx) {
@@ -5134,6 +5141,8 @@ app('navigateur', {
     const dock = GlassDock(bar, { source: () => view.firstElementChild });
     const pg = h('div', { class: 'page br' }, view, prog, dock); ctx.root(pg);
     ctx.onShow(() => dock.refresh());
+    /* the proxy answer may arrive after the page was first shown: switch the open website to it */
+    BR_PROXY.ready.then(ok => { if (ok && isExt(stack[idx]) && !view.querySelector('.via-p')) render(); });
     /* Safari-style: scrolling down shrinks the bar to a small address pill; scrolling up (or touching the pill) brings it back */
     const compact = on => { if (dock.classList.contains('compact') === on) return; dock.classList.toggle('compact', on); dock.refresh(); };
     const watchScroll = sc => { let lastY = 0; sc.addEventListener('scroll', () => { const y = sc.scrollTop, d = y - lastY; if (y < 12) compact(false); else if (d > 6) compact(true); else if (d < -6) compact(false); if (Math.abs(d) > 6) lastY = y; }, { passive: true }); };
