@@ -3802,8 +3802,11 @@ function wallGlass(el, R, target = el, cookie = false, src0 = null, extra = null
   const src = src0 || wallSrc(), sr = SCR.getBoundingClientRect(), dr = el.getBoundingClientRect(), dw = Math.round(el.offsetWidth), dh = Math.round(el.offsetHeight); if (!dw || !dh) return;
   const c = target.querySelector(':scope > .lgx-c') || h('canvas', { class: 'lgx-c', 'aria-hidden': 'true' }), d = src.d, cw = Math.round(dw * d), ch = Math.round(dh * d);
   if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; }
-  const cx = c.getContext('2d'), out = cx.createImageData(cw, ch), sc = dr.width / SC / dw;
-  LGX.plate(src, (dr.left - sr.left) / SC, (dr.top - sr.top) / SC, dw, dh, d, LGX.plateLook(D.documentElement.dataset.mode !== 'light' && D.documentElement.dataset.wall !== 'light', Object.assign({ R, cookie, mag: 1 / sc }, extra || {})), out); cx.putImageData(out, 0, 0);
+  /* layout position (offsets), not the on-screen one: drawn during the unlock zoom, the glass must still match the wallpaper */
+  let lx = 0, ly = 0, e = el; for (; e && e !== SCR; e = e.offsetParent) { lx += e.offsetLeft; ly += e.offsetTop; }
+  const lay = e === SCR, px = lay ? lx : (dr.left - sr.left) / SC, py = lay ? ly : (dr.top - sr.top) / SC;
+  const cx = c.getContext('2d'), out = cx.createImageData(cw, ch), sc = lay ? 1 : dr.width / SC / dw;
+  LGX.plate(src, px, py, dw, dh, d, LGX.plateLook(D.documentElement.dataset.mode !== 'light' && D.documentElement.dataset.wall !== 'light', Object.assign({ R, cookie, mag: 1 / sc }, extra || {})), out); cx.putImageData(out, 0, 0);
   if (c.parentNode !== target) target.prepend(c);
   el.classList.add('lgx-home');
 }
@@ -3813,7 +3816,9 @@ function homeGlass(tries = 0) {
 }
 /* App icons in Liquid Glass: each icon is a small glass plate (iOS rounded square) bending the wallpaper
    behind it, with its white glyph on top. */
-function iconGlass(ico, src = null) { const sh = ico && $('.sh', ico), bg = sh && $('.bg', sh); if (!bg) return; ico.classList.add('gl'); wallGlass(sh, sh.offsetWidth / 2, bg, false, src, { blob: { x: IDROP.qx, y: IDROP.qy } }); }
+function iconGlass(ico, src = null) { const sh = ico && $('.sh', ico), bg = sh && $('.bg', sh); if (!bg) return; ico.classList.add('gl'); wallGlass(sh, sh.offsetWidth / 2, bg, false, src, { blob: { x: IDROP.qx, y: IDROP.qy }, ...ICONLOOK }); }
+/* a clear drop: thinner bent edge, almost no tint, so what is under the icon shows through (only the rim bends it) */
+const ICONLOOK = { bezel: 13, refr: 46, tint: [255, 255, 255, .04], bevel: .09, rim: .55, disp: .025 };
 /* App icons are drops of water lying flat: almost round, a little irregular, and they shift a touch
    with the phone's tilt (real gravity, much gentler than the tab-bar drops). One shared shape per tilt
    step, so all icons are redrawn together only when the tilt really changes. */
