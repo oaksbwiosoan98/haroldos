@@ -435,6 +435,7 @@ input[type=date].tf,input[type=time].tf{padding-right:10px}
 #lock .lclock span{display:block}
 #lock .lclock span+span{color:var(--on-primary-c)}
 #lock .lnotifs{width:100%;padding:0 12px;margin-top:auto;display:flex;flex-direction:column;gap:3px;max-height:270px;overflow:hidden}
+#lock .lsp{height:20px;animation:none!important}
 #lock .lhint{margin:22px 0 calc(var(--sab) + 26px);font-size:13.5px;color:var(--on-s-v);display:flex;align-items:center;gap:6px;animation:nudge 2.4s infinite var(--e-std)}
 @keyframes nudge{0%,60%,100%{transform:none}30%{transform:translateY(-6px)}}
 #lock .lbtns{position:absolute;left:24px;right:24px;bottom:calc(var(--sab) + 8px);display:flex;justify-content:space-between;pointer-events:none}
@@ -2137,7 +2138,7 @@ textarea.tf{padding:11px 14px}
       <li><span class="ms">swap_horiz</span><span><b>Glisser sur la barre du bas</b> vers la gauche ou la droite : app précédente</span></li>
       <li><span class="ms">notifications</span><span><b>Tirer depuis le haut, à gauche</b> : notifications</span></li>
       <li><span class="ms">toggle_on</span><span><b>Tirer depuis le haut, à droite</b> : centre de contrôle</span></li>
-      <li><span class="ms">apps</span><span><b>Glisser vers le haut sur l'accueil</b> : toutes les applications</span></li>
+      <li><span class="ms">apps</span><span><b>Glisser vers la droite sur l'accueil</b> : toutes les applications</span></li>
       <li><span class="ms">search</span><span><b>Tirer vers le bas sur l'accueil</b> : recherche</span></li>
       <li><span class="ms">arrow_back</span><span><b>Glisser depuis le bord gauche</b> : retour</span></li>
       <li><span class="ms">touch_app</span><span><b>Appui long sur une icône</b> : raccourcis et réorganisation</span></li>
@@ -3962,14 +3963,14 @@ function buildDrawer() {
   drag(panel, {
     threshold: 6,
     start(st, e) { if (e.target.closest('input')) return false; cancelAnimationFrame(DRW.inertia); st.sy0 = DRW.sy; st.ico = e.target.closest('.ico'); if (st.ico) st.lp = setTimeout(() => { st.long = true; homeLongPress(st.ico, st); }, 480); },
-    engage(st) { clearTimeout(st.lp); if (st.long || Math.abs(st.dx) > Math.abs(st.dy)) return false; st.mode = DRW.sy <= 0 && st.dy > 0 ? 'close' : 'scroll'; panel.style.transition = 'none'; },
+    engage(st) { clearTimeout(st.lp); if (st.long) return false; if (Math.abs(st.dx) > Math.abs(st.dy)) { if (st.dx > 0) return false; st.mode = 'close'; } else st.mode = 'scroll'; panel.style.transition = 'none'; },
     move(st) {
-      if (st.mode === 'close') { panel.style.transform = `translateY(${Math.max(0, st.dy)}px)`; drawerHome(1 - Math.max(0, st.dy) / H); return; }
+      if (st.mode === 'close') { const x = Math.min(0, st.dx); panel.style.transform = `translateX(${x}px)`; drawerHome(1 + x / W); return; }
       let y = st.sy0 - st.dy; const m = maxY(); if (y < 0) y *= .35; if (y > m) y = m + (y - m) * .35; setY(y);
     },
     end(st) {
       panel.style.transition = '';
-      if (st.mode === 'close') { if (st.dy > 110 || st.vy > .5) closeDrawer(); else { panel.style.transform = ''; drawerHome(1); } return; }
+      if (st.mode === 'close') { if (st.dx < -110 || st.vx < -.5) closeDrawer(); else { panel.style.transform = 'translateX(0)'; drawerHome(1); } return; }
       let v = -st.vy * 16; const m = maxY();
       const step = () => { let y = DRW.sy + v; v *= .94; if (y < 0 || y > m) { y = clamp(y, 0, m); v = 0; } setY(y); if (Math.abs(v) > .3) DRW.inertia = requestAnimationFrame(step); };
       if (DRW.sy < 0 || DRW.sy > m) { content.style.transition = 'transform .4s var(--e-spatial-soft)'; setY(clamp(DRW.sy, 0, m)); setTimeout(() => content.style.transition = '', 420); } else DRW.inertia = requestAnimationFrame(step);
@@ -3995,9 +3996,10 @@ function drawerBegin() {
   DRW.fresh = newApps().map(a => a.id); DRW.q = ''; DRW.inp.value = ''; DRW.sy = 0; renderDrawer();
   L.drawer.classList.add('on'); OS.overlay = 'drawer'; updateGz();
 }
-function drawerDrag(p) { drawerBegin(); DRW.panel.style.transition = 'none'; DRW.panel.style.transform = `translateY(${(1 - p) * H}px)`; drawerHome(p); }
+function drawerDrag(p) { drawerBegin(); DRW.panel.style.transition = 'none'; DRW.panel.style.transform = `translateX(${-(1 - p) * W}px)`; drawerHome(p); }
 function openDrawer() {
-  drawerBegin(); const pn = DRW.panel; pn.style.transition = 'transform .55s var(--e-spatial-soft)'; reflow(pn); pn.style.transform = 'translateY(0)';
+  const was = OS.overlay === 'drawer'; drawerBegin(); const pn = DRW.panel; if (!was) { pn.style.transition = 'none'; pn.style.transform = 'translateX(-100%)'; reflow(pn); }
+  pn.style.transition = 'transform .7s cubic-bezier(.22,.8,.26,1)'; pn.style.transform = 'translateX(0)'; /* comes in softly from the left */
   L.home.style.transition = 'opacity .35s, transform .5s var(--e-std)'; L.home.style.opacity = .25; L.home.style.transform = 'scale(.94)'; L.drawer.style.transition = 'opacity .25s'; L.drawer.style.opacity = 1;
   const hint = $('#drawhint .nd'); hint && hint.remove();
 }
@@ -4008,7 +4010,7 @@ function closeDrawer(instant) {
   const pn = DRW.panel, done = () => { L.drawer.classList.remove('on'); pn.style.transform = ''; L.drawer.style.opacity = ''; L.drawer.style.transition = ''; };
   L.home.style.transition = 'opacity .3s, transform .5s var(--e-spatial-soft)'; L.home.style.opacity = ''; L.home.style.transform = '';
   if (instant) { done(); return; }
-  pn.style.transition = 'transform .4s var(--e-std)'; pn.style.transform = `translateY(${H}px)`; L.drawer.style.transition = 'opacity .35s'; L.drawer.style.opacity = 0; setTimeout(() => { if (OS.overlay !== 'drawer') done(); }, 380);
+  pn.style.transition = 'transform .4s var(--e-std)'; pn.style.transform = 'translateX(-100%)'; L.drawer.style.transition = 'opacity .35s'; L.drawer.style.opacity = 0; setTimeout(() => { if (OS.overlay !== 'drawer') done(); }, 380);
 }
 /* ---------- Pressing a drop of glass ----------
    App icons, round buttons (+, record, the round button of the bottom bars, trash…) and keys are drops of water:
@@ -4055,10 +4057,12 @@ function setupHome() {
       clearTimeout(st.lp);
       if (st.ready && st.item) { if (OPEN_LAYERS.length) closeTopLayer(); return moveStart(st); }
       if (st.long) return false;
-      return false; /* no search and no app drawer: every app lives on the home screen */
+      if (st.dx > 0 && Math.abs(st.dx) > Math.abs(st.dy) * 1.2) { st.mode = 'drawer'; return; } /* swipe to the right: app drawer */
+      return false;
     },
     move(st) {
       if (st.mode === 'move') return moveMove(st);
+      if (st.mode === 'drawer') { if (!st.opened && st.dx > W * .5) { st.opened = true; buzz(10); openDrawer(); } return; } /* the first half of the swipe does nothing */
       if (st.mode === 'search') { const p = clamp(st.dy / 160, 0, 1); L.home.style.transition = 'none'; L.home.style.transform = `translateY(${st.dy * .25}px) scale(${1 - p * .04})`; L.home.style.opacity = 1 - p * .5; }
     },
     end(st) {
@@ -5030,7 +5034,7 @@ function setupBanner() { drag(L.banner, { engage: st => st.dy < 0 ? undefined : 
 /* ---------- Lock screen ---------- */
 let pendingAfterUnlock = null;
 function buildLock() {
-  L.lock.replaceChildren(h('div', { class: 'lwall' }), h('div', { class: 'lc' }, h('div', { class: 'ldate' }), h('div', { class: 'lclock' }), h('div', { class: 'lnotifs' }), h('div', { class: 'lhint' }, I('keyboard_arrow_up'), 'Glissez vers le haut')), h('div', { class: 'lbtns' }));
+  L.lock.replaceChildren(h('div', { class: 'lwall' }), h('div', { class: 'lc' }, h('div', { class: 'ldate' }), h('div', { class: 'lclock' }), h('div', { class: 'lnotifs' }), h('div', { class: 'lhint lsp', 'aria-hidden': 'true' })), h('div', { class: 'lbtns' }));
   renderLock(); applyWall();
   drag(L.lock, {
     start(st, e) { if (OS.off || OS.booting || e.target.closest('.lbtns,.pinpad,.ncard')) { if (e.target.closest('.ncard') && !e.target.closest('.pinpad')) { st.n = true; } else return false; } },
@@ -6800,7 +6804,7 @@ app('navigateur', {
         h('h2', {}, 'Ingrédients'), h('ul', {}, ['1 pâte brisée', '5 pommes', '2 œufs', '80 g de sucre', '20 cl de crème', '1 sachet de sucre vanillé', '1 pincée de cannelle'].map(x => h('li', {}, x))),
         h('h2', {}, 'Préparation'), h('ol', {}, ['Préchauffez le four à 190 °C et étalez la pâte dans un moule.', 'Épluchez les pommes et coupez-les en fines lamelles.', 'Disposez les lamelles en rosace sur la pâte.', 'Battez les œufs avec le sucre, la crème et la cannelle, puis versez sur les pommes.', 'Enfournez 35 minutes, jusqu\'à ce que le dessus soit doré.'].map(x => h('li', {}, x)))),
       guide: () => h('article', { class: 'web' }, h('div', { class: 'kick' }, 'Aide'), h('h1', {}, 'Bien démarrer avec Harold OS'), h('p', {}, 'Harold OS se pilote avec des gestes, comme un iPhone, et suit le style Material You Expressive.'),
-        h('h2', {}, 'Les gestes'), h('ul', {}, ['Glisser vers le haut depuis la barre du bas : retour à l\'accueil.', 'Glisser vers le haut puis marquer une pause : apps ouvertes.', 'Glisser sur la barre du bas : app précédente.', 'Glisser vers le haut sur l\'accueil : toutes les applications.', 'Tirer depuis le haut à gauche : notifications. À droite : centre de contrôle.', 'Glisser depuis le bord gauche : retour.'].map(x => h('li', {}, x))),
+        h('h2', {}, 'Les gestes'), h('ul', {}, ['Glisser vers le haut depuis la barre du bas : retour à l\'accueil.', 'Glisser vers le haut puis marquer une pause : apps ouvertes.', 'Glisser sur la barre du bas : app précédente.', 'Glisser vers la droite sur l\'accueil : toutes les applications.', 'Tirer depuis le haut à gauche : notifications. À droite : centre de contrôle.', 'Glisser depuis le bord gauche : retour.'].map(x => h('li', {}, x))),
         h('h2', {}, 'Astuces'), h('ul', {}, ['Maintenez une icône pour ses raccourcis ou pour réorganiser l\'écran.', 'Dans Plans, maintenez la carte pour placer un repère.', 'Paramètres > Données permet de sauvegarder tout le téléphone dans un fichier.'].map(x => h('li', {}, x)))),
       recherche: u => { const q = decodeURIComponent((u.split('q=')[1] || '')), nq = norm(q);
         const hits = [['harold://actus', 'Actualités', 'Harold Actus'], ['harold://recette', 'Tarte aux pommes', 'Recette facile'], ['harold://guide', 'Guide Harold OS', 'Gestes et astuces'], ...ACTUS.map((a, i) => ['harold://actus/' + i, a.t, a.p[0]])].filter(([, t, d]) => norm(t + ' ' + d).includes(nq));
@@ -7195,6 +7199,7 @@ const KB = {
     if (el.tagName === 'TEXTAREA') this.insert('\n'); else if (el.form) { try { el.form.requestSubmit(); } catch (e) { } }
   },
   type(ch) {
+    const st0 = this.layer + '|' + this.shift;
     if (ch === '␣') {
       const el = this.el, [s] = this.sel(), before = el.value.slice(0, s);
       if (now() - this.lastSpace < 420 && / $/.test(before) && /[\p{L}\p{N}\p{Emoji_Presentation}]$/u.test(before.slice(0, -1))) { el.setRangeText('. ', s - 1, s, 'end'); this.changed(); this.lastSpace = 0; }
@@ -7202,26 +7207,37 @@ const KB = {
     } else { if (this.layer === 'abc' && this.shift) ch = ch.toUpperCase(); this.insert(ch); this.lastSpace = 0; }
     if (this.shift === 1) this.shift = 0;
     if ((this.layer === 'sym1' || this.layer === 'sym2') && ch === "'") this.layer = 'abc';
-    this.autoShift(); this.render();
+    this.autoShift(); if (this.layer + '|' + this.shift !== st0) this.render(); /* the keys are only redrawn when they change (shift, layer) */
   },
   /* ----- pointer handling ----- */
   down(b, e) {
-    const k = b.dataset.k; SND.play('tap'); buzz(4); this.endPress();
-    if (k === '⌫') { b.classList.add('down'); this.back(); const p = this.press = { b, k, rep: setTimeout(function rep() { KB.back(); p.rep = setTimeout(rep, 65); }, 450) }; this.track(e); return; }
+    const k = b.dataset.k; SND.play('tap'); buzz(4);
+    /* fast typing: a finger that lands while the previous one is still down writes the previous letter at once
+       (like the iPhone), instead of losing it */
+    const prev = this.press;
+    if (prev && prev.k !== '⌫' && !(e && prev.id != null && prev.id === e.pointerId)) {
+      this.press = null; clearTimeout(prev.lp); prev.b && prev.b.classList.remove('down');
+      if (prev.alt) { prev.alt.remove(); if (prev.pick) { this.insert(this.shift && this.layer === 'abc' ? prev.pick.toUpperCase() : prev.pick); if (this.shift === 1) this.shift = 0; this.autoShift(); this.render(); } } /* accent menu open: its letter */
+      else this.type(prev.k);
+      if (!b.isConnected) b = $$('[data-k]', this.root).find(x => x.dataset.k === k) || b;
+    }
+    this.endPress();
+    if (k === '⌫') { b.classList.add('down'); this.back(); const p = this.press = { b, k, id: e && e.pointerId, rep: setTimeout(function rep() { KB.back(); p.rep = setTimeout(rep, 65); }, 450) }; this.track(e); return; }
     if (k === '⇧') { const t = now(); this.shift = this.shift === 0 ? (t - this.lastShift < 320 ? 2 : 1) : (this.shift === 1 && t - this.lastShift < 320 ? 2 : 0); this.lastShift = t; this.render(); return; }
     const sw = { '123': 'sym1', '?123': 'sym1', '=\\<': 'sym2', 'ABC': this.kind() === 'num' ? 'num' : 'abc', '😊': 'emoji' }[k];
     if (sw) { this.layer = sw; if (sw === 'abc') this.autoShift(); this.render(); return; }
     if (k === '⏎') { b.classList.add('down'); setTimeout(() => b.classList.remove('down'), 140); this.enter(); return; }
     b.classList.add('down');
-    const p = this.press = { b, k, alt: null, pick: null };
+    const p = this.press = { b, k, alt: null, pick: null, id: e && e.pointerId };
     if (k.length === 1 || k === '␣') this.preview(b, k);
     const acc = KB_ACCENTS[k.toLowerCase()];
     if (acc && this.layer !== 'emoji') p.lp = setTimeout(() => this.accents(p, acc), 380);
     this.track(e);
   },
   track(e) {
-    const mv = ev => { const p = this.press; if (!p || !p.alt) return; const opts = $$('button', p.alt); let best = null, bd = 1e9; opts.forEach(o => { const r = o.getBoundingClientRect(), d = Math.abs(ev.clientX - (r.left + r.width / 2)); if (d < bd) { bd = d; best = o; } }); opts.forEach(o => o.classList.toggle('on', o === best)); p.pick = best && best.dataset.v; };
-    const up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); const p = this.press; if (!p) return;
+    const mine = this.press, own = ev => !mine || mine.id == null || ev.pointerId == null || ev.pointerId === mine.id;
+    const mv = ev => { if (!own(ev)) return; const p = this.press; if (!p || p !== mine || !p.alt) return; const opts = $$('button', p.alt); let best = null, bd = 1e9; opts.forEach(o => { const r = o.getBoundingClientRect(), d = Math.abs(ev.clientX - (r.left + r.width / 2)); if (d < bd) { bd = d; best = o; } }); opts.forEach(o => o.classList.toggle('on', o === best)); p.pick = best && best.dataset.v; };
+    const up = ev => { if (!own(ev)) return; window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); const p = this.press; if (!p || p !== mine) return;
       if (p.k !== '⌫') { if (p.alt) { if (p.pick) { this.insert(this.shift && this.layer === 'abc' ? p.pick.toUpperCase() : p.pick); if (this.shift === 1) this.shift = 0; this.autoShift(); this.render(); } } else this.type(p.k); }
       this.endPress(); };
     window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
