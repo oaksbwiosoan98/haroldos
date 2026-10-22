@@ -1729,27 +1729,40 @@ textarea.tf{padding:11px 14px}
 .sbox input{font-size:17px}
 .sres .calc{border-radius:14px;background:var(--bg3);color:var(--label);font-weight:600}
 
-/* ---------- 8. Keyboard (iOS dark / light) ---------- */
-#kb{background:#2B2B2D}
-:root[data-mode="light"] #kb{background:#D1D3D9}
+/* ---------- 8. Keyboard (iOS 26) ----------
+   a light panel with big rounded top corners, flatter and more rounded keys, "123 · espace · retour" at the
+   bottom (the return key is a blue word when it acts: rechercher, envoyer…), the emoji key under the keys */
+#kb{background:#2C2C2E;border-radius:28px 28px 0 0;padding:9px 6px 0;gap:11px;box-shadow:0 -8px 24px rgb(0 0 0 / .14)}
+:root[data-mode="light"] #kb{background:#E3E5EA;box-shadow:inset 0 .5px 0 rgb(255 255 255 / .95),0 -6px 22px rgb(0 0 0 / .07)}
+#kb[data-layer="num"]{padding-bottom:calc(var(--sab) + 8px)}
 .kb-r{gap:6px}
-.kb-k{border-radius:5px;background:#6B6B6D;color:#fff;font-size:23px;font-weight:400;box-shadow:0 1px 0 rgb(0 0 0 / .35)}
-.kb-k.fn{background:#464648;color:#fff;font-size:16px;font-weight:400}
+.kb-k{height:clamp(42px, 5.5cqh, 46px);border-radius:9px;background:#6C6C70;color:#fff;font-size:23px;font-weight:400;box-shadow:none}
+.kb-k.fn{background:#47474B;color:#fff;font-size:16px;font-weight:400}
 .kb-k.on{background:#fff;color:#000}
-.kb-k.enter{background:#464648;color:#fff;border-radius:5px}
-.kb-k.space{background:#6B6B6D}
-.kb-k.down{border-radius:5px;background:#464648;color:#fff;transform:none}
-.kb-k.fn.down,.kb-k.enter.down{background:#6B6B6D}
-:root[data-mode="light"] .kb-k{background:#fff;color:#000;box-shadow:0 1px 0 rgb(0 0 0 / .3)}
-:root[data-mode="light"] .kb-k.fn,:root[data-mode="light"] .kb-k.enter{background:#ACB0BA;color:#000}
-:root[data-mode="light"] .kb-k.down{background:#ACB0BA}
-:root[data-mode="light"] .kb-k.fn.down{background:#fff}
+.kb-k.enter{background:#47474B;color:#fff;border-radius:9px}
+.kb-k.enter.act{background:var(--ios-blue);color:#fff}
+.kb-k.space{background:#6C6C70}
+.kb-k.down{border-radius:9px;background:#47474B;color:#fff;transform:none}
+.kb-k.fn.down,.kb-k.enter.down{background:#6C6C70}
+.kb-k.enter.act.down{background:#0062CC}
+:root[data-mode="light"] .kb-k{background:#fff;color:#000;box-shadow:0 1px .5px rgb(0 0 0 / .13)}
+:root[data-mode="light"] .kb-k.fn,:root[data-mode="light"] .kb-k.enter{background:#C3C6CE;color:#000}
+:root[data-mode="light"] .kb-k.enter.act{background:var(--ios-blue);color:#fff}
+:root[data-mode="light"] .kb-k.down{background:#C3C6CE}
+:root[data-mode="light"] .kb-k.fn.down,:root[data-mode="light"] .kb-k.enter.down{background:#fff}
+:root[data-mode="light"] .kb-k.enter.act.down{background:#0062CC;color:#fff}
+.kb-k.w5{flex-grow:5.2}
+.kb-k.w25{flex-grow:2.6}
 .kb-sp{font-size:16px;font-weight:400;color:inherit;letter-spacing:0}
-.kb-pv{border-radius:10px;background:#6B6B6D;color:#fff;font-weight:400}
-:root[data-mode="light"] .kb-pv{background:#fff;color:#000;box-shadow:0 2px 6px rgb(0 0 0 / .3)}
-.kb-alt{border-radius:10px;background:#6B6B6D}
-.kb-alt button{border-radius:6px;color:#fff}
-.kb-alt button.on{background:var(--ios-blue);color:#fff;border-radius:6px}
+.kb-ft{display:flex;align-items:flex-start;height:calc(var(--sab) + 22px);min-height:46px;padding:0 6px}
+.kb-k.kb-fb{flex:0 0 46px;height:40px;background:transparent!important;box-shadow:none!important;color:inherit}
+:root[data-mode="light"] .kb-k.kb-fb{color:#3C3C43}
+.kb-k.kb-fb .ms,.kb-k.kb-fb svg{font-size:27px;width:27px;height:27px}
+.kb-pv{border-radius:12px;background:#6C6C70;color:#fff;font-weight:400}
+:root[data-mode="light"] .kb-pv{background:#fff;color:#000;box-shadow:0 2px 8px rgb(0 0 0 / .22)}
+.kb-alt{border-radius:14px;background:#6C6C70}
+.kb-alt button{border-radius:9px;color:#fff}
+.kb-alt button.on{background:var(--ios-blue);color:#fff;border-radius:9px}
 .kb-et{color:var(--label2);font-weight:600;text-transform:uppercase;font-size:12px}
 
 /* ---------- 9. Apps ---------- */
@@ -7228,20 +7241,21 @@ const KB = {
     p.alt = box; p.pick = chars[0];
   },
   /* ----- rendering ----- */
+  enterLabel() { const el = this.el, hint = el && (el.getAttribute('enterkeyhint') || ''); return { send: 'envoyer', search: 'rechercher', go: 'aller', next: 'suivant', done: 'OK' }[hint] || 'retour'; },
   enterIcon() { const el = this.el, hint = el && (el.getAttribute('enterkeyhint') || ''); if (hint === 'send') return 'send'; if (hint === 'search') return 'search'; if (hint === 'go' || hint === 'next') return 'arrow_forward'; if (hint === 'done') return 'check'; return 'keyboard_return'; },
   key(k, cls = '', label = null) {
-    const lab = label != null ? label : k === '⌫' ? I('backspace') : k === '⇧' ? I(this.shift === 2 ? 'keyboard_capslock' : 'arrow_upward', this.shift ? 'f' : '') : k === '⏎' ? I(this.enterIcon()) : k === '😊' ? I('sentiment_satisfied') : k === '␣' ? (this.layer === 'num' ? I('space_bar') : h('span', { class: 'kb-sp' }, 'Français'))
+    const lab = label != null ? label : k === '⌫' ? I('backspace') : k === '⇧' ? I(this.shift === 2 ? 'keyboard_capslock' : 'arrow_upward', this.shift ? 'f' : '') : k === '⏎' ? (this.layer === 'num' ? I(this.enterIcon()) : h('span', { class: 'kb-sp' }, this.enterLabel())) : k === '😊' ? I('sentiment_satisfied') : k === '␣' ? (this.layer === 'num' ? I('space_bar') : h('span', { class: 'kb-sp' }, 'espace'))
       : (this.layer === 'abc' && this.shift && k.length === 1 ? k.toUpperCase() : k);
     const fn = ['⇧', '⌫', '123', '?123', '=\\<', 'ABC', '😊'].includes(k);
-    return h('button', { class: 'kb-k' + (fn ? ' fn' : '') + (k === '⏎' ? ' enter' : '') + (k === '␣' ? ' space' : '') + (k === '⇧' && this.shift ? ' on' : '') + ' ' + cls, 'data-k': k, 'aria-label': k === '␣' ? 'Espace' : k === '⌫' ? 'Effacer' : k === '⏎' ? 'Entrée' : k === '⇧' ? 'Majuscule' : k === '😊' ? 'Émojis' : k }, lab);
+    return h('button', { class: 'kb-k' + (fn ? ' fn' : '') + (k === '⏎' ? ' enter' + (this.layer !== 'num' && this.enterLabel() !== 'retour' ? ' act' : '') : '') + (k === '␣' ? ' space' : '') + (k === '⇧' && this.shift ? ' on' : '') + ' ' + cls, 'data-k': k, 'aria-label': k === '␣' ? 'Espace' : k === '⌫' ? 'Effacer' : k === '⏎' ? 'Entrée' : k === '⇧' ? 'Majuscule' : k === '😊' ? 'Émojis' : k }, lab);
   },
   bottomRow() {
     const kd = this.kind();
     if (this.layer === 'emoji') return [this.key('ABC', 'w15'), this.key('␣', 'w5'), this.key('⌫', 'w15')];
-    const sw = this.layer === 'abc' ? this.key('123', 'w15', '?123') : this.key('ABC', 'w15');
+    const sw = this.layer === 'abc' ? this.key('123', 'w15', '123') : this.key('ABC', 'w15');
     if (kd === 'email') return [sw, this.key('@'), this.key('␣', 'w4'), this.key('.'), this.key('⏎', 'w16')];
     if (kd === 'url') return [sw, this.key('/'), this.key('␣', 'w4'), this.key('.'), this.key('⏎', 'w16')];
-    return [sw, this.key('😊'), this.key(','), this.key('␣', 'w4'), this.key('.'), this.key('⏎', 'w16')];
+    return [sw, this.key('␣', 'w5'), this.key('⏎', 'w25')];
   },
   render() {
     if (!this.root) return; const L0 = this.layer, rows = [];
@@ -7256,6 +7270,8 @@ const KB = {
       KB_LAYERS[L0].forEach((r, i) => rows.push(h('div', { class: 'kb-r' + (i === 2 ? ' r3' : '') }, r.map(k => this.key(k, k === '⇧' || k === '⌫' || k === '=\\<' || k === '?123' ? 'w15' : '')))));
       rows.push(h('div', { class: 'kb-r' }, this.bottomRow()));
     }
+    /* like the iPhone: the emoji key sits under the keys, in the band above the home bar */
+    if (L0 !== 'num') rows.push(h('div', { class: 'kb-ft' }, L0 === 'emoji' ? this.key('ABC', 'kb-fb', I('keyboard')) : this.key('😊', 'kb-fb')));
     const prevScroll = $('.kb-emo', this.root); const st = prevScroll ? prevScroll.scrollTop : 0;
     this.root.replaceChildren(...rows); if (L0 === 'emoji') { const g = $('.kb-emo', this.root); if (g && prevScroll) g.scrollTop = st; }
     this.root.dataset.layer = L0;
