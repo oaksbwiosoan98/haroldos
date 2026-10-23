@@ -1670,7 +1670,9 @@ textarea.tf{padding:11px 14px}
 /* ---------- 7. System chrome ---------- */
 /* status bar + Dynamic Island */
 #sbar{padding:0 26px 0 30px;font-size:17px;font-weight:600;letter-spacing:-.02em}
-#sbar > .tn{width:96px;text-align:center}
+#sbar > .tn,#sbar > .r{position:absolute;top:0;bottom:0;display:flex;align-items:center}
+#sbar > .tn{right:calc(50% + 61px + 39px);justify-content:flex-end} /* same gap to the island as the icons on the right */
+#sbar > .r{left:calc(50% + 61px + 39px)}
 #sbar .r{gap:6px}
 .punch{top:11px;width:122px;height:35px;margin-left:-61px;border-radius:18px;box-shadow:none}
 .ios-sig{display:inline-flex;align-items:flex-end;gap:1.5px;height:12px}
@@ -3240,7 +3242,7 @@ const LGX = {
     const W = Math.round(pr.width / SC), H = opt.flat ? Math.round(Math.min(pr.height / SC + (opt.maxH ? 1e9 : 0), opt.maxH || 1e9)) : Math.min(4200, Math.max(Math.round(pr.height / SC), sc ? Math.round((sc.getBoundingClientRect().top - pr.top) / SC + sc.scrollHeight) : 0));
     const cv = mkCanvas(Math.round(W * dpr), Math.round(H * dpr)), x = cv.getContext('2d'); x.scale(dpr, dpr);
     /* glass apps (PGG): the backdrop is fixed and drawn separately, so the content is rastered on transparent */
-    const pgg = !!((opt.pgg || opt.pggBase) && typeof PGG !== 'undefined' && PGG.ok && (page.closest('.pgg-on') || page.querySelector('.pgg-on')));
+    const pgg = !!((opt.pgg || opt.pggBase) && typeof PGG !== 'undefined' && PGG.ok && (page.closest('.pgg-host') || [...page.querySelectorAll('.pgg-host')].some(e => e.offsetParent))); /* only a page that shows the shapes backdrop (a plain white page, like an open e-mail, keeps its white) */
     if (pgg && opt.pgg) opt = Object.assign({}, opt, { clear: true });
     let bgc = 'rgb(20,22,20)'; for (let e = page; e; e = e.parentElement) { const b = getComputedStyle(e).backgroundColor; if (b && b !== 'transparent' && !/^rgba\(.*,\s*0\)$/.test(b)) { bgc = b; break; } /* rgb(0, 0, 0) is black, not transparent */ }
     if (!opt.clear) { x.fillStyle = bgc; x.fillRect(0, 0, W, H); if (opt.under) try { opt.under(x, W, H); } catch (e) { } }
